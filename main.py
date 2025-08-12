@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from motor.motor_asyncio import AsyncIOMotorClient
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 import asyncio
 import os
 import secrets
@@ -15,9 +15,16 @@ import uuid
 import aiohttp
 from bson import ObjectId
 import logging
+import warnings
+
+# Suppress warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Configuration
@@ -46,22 +53,26 @@ security = HTTPBasic()
 class Database:
     def __init__(self):
         self.client = None
+        self.connected = False
         self.connect()
     
     def connect(self):
         mongodb_url = os.getenv("MONGODB_URL")
-        logger.info(f"Attempting MongoDB connection...")
+        logger.info("Attempting MongoDB connection...")
         
         if mongodb_url:
             try:
                 self.client = AsyncIOMotorClient(mongodb_url)
+                self.connected = True
                 logger.info("MongoDB client initialized successfully")
             except Exception as e:
                 logger.error(f"MongoDB connection error: {e}")
                 self.client = None
+                self.connected = False
         else:
             logger.error("MONGODB_URL environment variable not found")
             self.client = None
+            self.connected = False
 
 # Initialize database
 db = Database()
@@ -70,11 +81,12 @@ async def connect_to_mongo():
     """Test MongoDB connection"""
     if db.client:
         try:
-            # Test connection
             await db.client.admin.command('ping')
             logger.info("MongoDB connection test successful")
+            db.connected = True
         except Exception as e:
             logger.error(f"MongoDB connection test failed: {e}")
+            db.connected = False
 
 async def close_mongo_connection():
     if db.client:
@@ -84,10 +96,8 @@ async def close_mongo_connection():
 # Database Models with safety checks
 class UserModel:
     def __init__(self):
-        if db.client is None:
-            logger.warning("MongoDB client not initialized - UserModel will use dummy operations")
-            self.collection = None
-        else:
+        self.collection = None
+        if db.client:
             self.collection = db.client.walletbot.users
     
     async def create_user(self, user_data: dict):
@@ -95,15 +105,16 @@ class UserModel:
             logger.warning("UserModel: Collection not available")
             return None
             
-        user_data["created_at"] = datetime.utcnow()
-        user_data["wallet_balance"] = 0.0
-        user_data["total_earned"] = 0.0
-        user_data["referral_earnings"] = 0.0
-        user_data["total_referrals"] = 0
-        user_data["is_active"] = True
-        
         try:
+            user_data["created_at"] = datetime.utcnow()
+            user_data["wallet_balance"] = 0.0
+            user_data["total_earned"] = 0.0
+            user_data["referral_earnings"] = 0.0
+            user_data["total_referrals"] = 0
+            user_data["is_active"] = True
+            
             result = await self.collection.insert_one(user_data)
+            logger.info(f"User created: {user_data['user_id']}")
             return str(result.inserted_id)
         except Exception as e:
             logger.error(f"Error creating user: {e}")
@@ -122,6 +133,7 @@ class UserModel:
         if not self.collection:
             return False
         try:
+            update_data["updated_at"] = datetime.utcnow()
             await self.collection.update_one(
                 {"user_id": user_id},
                 {"$set": update_data}
@@ -133,17 +145,21 @@ class UserModel:
     
     async def add_to_wallet(self, user_id: int, amount: float, transaction_type: str, description: str):
         if not self.collection:
+            logger.warning("Cannot add to wallet - database not connected")
             return False
             
         try:
             user = await self.get_user(user_id)
             if not user:
+                logger.warning(f"User not found: {user_id}")
                 return False
             
-            new_balance = user["wallet_balance"] + amount
-            total_earned = user["total_earned"] + amount if amount > 0 else user["total_earned"]
+            new_balance = user.get("wallet_balance", 0) + amount
+            total_earned = user.get("total_earned", 0)
+            if amount > 0:
+                total_earned += amount
             
-            await self.collection.update_one(
+            update_result = await self.collection.update_one(
                 {"user_id": user_id},
                 {
                     "$set": {
@@ -154,27 +170,31 @@ class UserModel:
                 }
             )
             
-            # Create transaction record
-            transaction = TransactionModel()
-            await transaction.create_transaction({
-                "user_id": user_id,
-                "amount": amount,
-                "type": transaction_type,
-                "description": description,
-                "balance_after": new_balance,
-                "status": "completed"
-            })
-            
-            return True
+            if update_result.modified_count > 0:
+                # Create transaction record
+                transaction = TransactionModel()
+                await transaction.create_transaction({
+                    "user_id": user_id,
+                    "amount": amount,
+                    "type": transaction_type,
+                    "description": description,
+                    "balance_after": new_balance,
+                    "status": "completed"
+                })
+                logger.info(f"Wallet updated for user {user_id}: +{amount}")
+                return True
+            else:
+                logger.error(f"Failed to update wallet for user {user_id}")
+                return False
+                
         except Exception as e:
             logger.error(f"Error adding to wallet: {e}")
             return False
 
 class CampaignModel:
     def __init__(self):
-        if db.client is None:
-            self.collection = None
-        else:
+        self.collection = None
+        if db.client:
             self.collection = db.client.walletbot.campaigns
     
     async def create_campaign(self, campaign_data: dict):
@@ -185,6 +205,7 @@ class CampaignModel:
             campaign_data["is_active"] = True
             campaign_data["completion_count"] = 0
             result = await self.collection.insert_one(campaign_data)
+            logger.info(f"Campaign created: {campaign_data['title']}")
             return str(result.inserted_id)
         except Exception as e:
             logger.error(f"Error creating campaign: {e}")
@@ -213,7 +234,8 @@ class CampaignModel:
             return []
         try:
             cursor = self.collection.find({"is_active": True})
-            return await cursor.to_list(length=None)
+            campaigns = await cursor.to_list(length=None)
+            return campaigns
         except Exception as e:
             logger.error(f"Error getting active campaigns: {e}")
             return []
@@ -222,6 +244,7 @@ class CampaignModel:
         if not self.collection:
             return False
         try:
+            update_data["updated_at"] = datetime.utcnow()
             await self.collection.update_one(
                 {"_id": ObjectId(campaign_id)},
                 {"$set": update_data}
@@ -233,9 +256,8 @@ class CampaignModel:
 
 class TransactionModel:
     def __init__(self):
-        if db.client is None:
-            self.collection = None
-        else:
+        self.collection = None
+        if db.client:
             self.collection = db.client.walletbot.transactions
     
     async def create_transaction(self, transaction_data: dict):
@@ -261,9 +283,8 @@ class TransactionModel:
 
 class SettingsModel:
     def __init__(self):
-        if db.client is None:
-            self.collection = None
-        else:
+        self.collection = None
+        if db.client:
             self.collection = db.client.walletbot.settings
     
     async def get_setting(self, key: str):
@@ -272,7 +293,7 @@ class SettingsModel:
             defaults = {
                 "referral_amount": 10,
                 "min_withdrawal": 6,
-                "welcome_message": "🎉 Welcome to Cashback Wallet Bot!",
+                "welcome_message": "🎉 Welcome to Cashback Wallet Bot!\n\n💰 Earn money by completing simple tasks\n💳 Instant payments to your wallet\n👥 Refer friends and earn bonus\n📱 Easy withdrawal system\n\nClick the buttons below to get started:",
                 "force_channels": []
             }
             return defaults.get(key)
@@ -298,42 +319,68 @@ class SettingsModel:
             logger.error(f"Error updating setting: {e}")
             return False
 
-# Initialize Models (with safety checks)
+# Initialize Models
 user_model = UserModel()
 campaign_model = CampaignModel()
 transaction_model = TransactionModel()
 settings_model = SettingsModel()
 
-# Telegram Bot Setup
+# Telegram Bot Setup (Fixed version)
 class WalletBot:
     def __init__(self):
+        self.bot = None
+        self.application = None
+        self.initialized = False
+        self.setup_bot()
+    
+    def setup_bot(self):
         try:
+            # Initialize bot
             self.bot = Bot(token=BOT_TOKEN)
-            self.application = Application.builder().token(BOT_TOKEN).build()
+            
+            # Create application using ApplicationBuilder (stable method)
+            self.application = ApplicationBuilder().token(BOT_TOKEN).build()
+            
+            # Setup handlers
             self.setup_handlers()
+            
+            self.initialized = True
             logger.info("Telegram bot initialized successfully")
+            
         except Exception as e:
             logger.error(f"Error initializing Telegram bot: {e}")
             self.bot = None
             self.application = None
+            self.initialized = False
     
     def setup_handlers(self):
         if not self.application:
+            logger.error("Application not initialized, skipping handler setup")
             return
             
-        self.application.add_handler(CommandHandler("start", self.start_command))
-        self.application.add_handler(CommandHandler("wallet", self.wallet_command))
-        self.application.add_handler(CommandHandler("campaigns", self.campaigns_command))
-        self.application.add_handler(CommandHandler("referral", self.referral_command))
-        self.application.add_handler(CallbackQueryHandler(self.button_handler))
-        self.application.add_handler(MessageHandler(filters.PHOTO, self.handle_screenshot))
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        try:
+            # Add command handlers
+            self.application.add_handler(CommandHandler("start", self.start_command))
+            self.application.add_handler(CommandHandler("wallet", self.wallet_command))
+            self.application.add_handler(CommandHandler("campaigns", self.campaigns_command))
+            self.application.add_handler(CommandHandler("referral", self.referral_command))
+            self.application.add_handler(CommandHandler("help", self.help_command))
+            
+            # Add callback and message handlers
+            self.application.add_handler(CallbackQueryHandler(self.button_handler))
+            self.application.add_handler(MessageHandler(filters.PHOTO, self.handle_screenshot))
+            self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+            
+            logger.info("Telegram bot handlers setup successfully")
+            
+        except Exception as e:
+            logger.error(f"Error setting up handlers: {e}")
     
     async def check_force_join(self, user_id: int) -> bool:
         """Check if user has joined all required channels"""
         try:
             force_channels = await settings_model.get_setting("force_channels")
-            if not force_channels:
+            if not force_channels or len(force_channels) == 0:
                 return True
             
             for channel in force_channels:
@@ -341,7 +388,8 @@ class WalletBot:
                     member = await self.bot.get_chat_member(channel, user_id)
                     if member.status in ['left', 'kicked']:
                         return False
-                except:
+                except Exception as e:
+                    logger.warning(f"Could not check membership for {channel}: {e}")
                     continue
             return True
         except Exception as e:
@@ -354,6 +402,8 @@ class WalletBot:
             username = update.effective_user.username or "Unknown"
             first_name = update.effective_user.first_name or "User"
             
+            logger.info(f"Start command from user: {user_id} ({first_name})")
+            
             # Check for deep link parameters
             args = context.args
             referrer_id = None
@@ -362,7 +412,10 @@ class WalletBot:
             if args:
                 param = args[0]
                 if param.startswith("camp_"):
-                    campaign_number = int(param.replace("camp_", ""))
+                    try:
+                        campaign_number = int(param.replace("camp_", ""))
+                    except ValueError:
+                        pass
                 elif param.isdigit():
                     referrer_id = int(param)
             
@@ -381,41 +434,56 @@ class WalletBot:
                 # Give referral bonus to referrer
                 if referrer_id:
                     referral_amount = await settings_model.get_setting("referral_amount") or 10
-                    await user_model.add_to_wallet(
+                    success = await user_model.add_to_wallet(
                         referrer_id, 
                         referral_amount, 
                         "referral", 
                         f"Referral bonus for {first_name}"
                     )
                     
-                    # Update referrer stats
-                    referrer = await user_model.get_user(referrer_id)
-                    if referrer:
-                        await user_model.update_user(referrer_id, {
-                            "total_referrals": referrer.get("total_referrals", 0) + 1,
-                            "referral_earnings": referrer.get("referral_earnings", 0) + referral_amount
-                        })
+                    if success:
+                        # Update referrer stats
+                        referrer = await user_model.get_user(referrer_id)
+                        if referrer:
+                            await user_model.update_user(referrer_id, {
+                                "total_referrals": referrer.get("total_referrals", 0) + 1,
+                                "referral_earnings": referrer.get("referral_earnings", 0) + referral_amount
+                            })
+                            
+                            # Notify referrer
+                            try:
+                                await self.bot.send_message(
+                                    referrer_id,
+                                    f"🎉 **New Referral!**\n\n"
+                                    f"👤 {first_name} joined using your link!\n"
+                                    f"💰 ₹{referral_amount} added to your wallet!\n"
+                                    f"💳 Check your balance with /wallet",
+                                    parse_mode="Markdown"
+                                )
+                            except:
+                                pass
             
             # Check force join
             if not await self.check_force_join(user_id):
                 force_channels = await settings_model.get_setting("force_channels") or []
-                keyboard = []
-                for channel in force_channels:
-                    try:
-                        chat = await self.bot.get_chat(channel)
-                        keyboard.append([InlineKeyboardButton(f"Join {chat.title}", url=f"https://t.me/{chat.username}")])
-                    except:
-                        continue
-                
-                keyboard.append([InlineKeyboardButton("✅ Check Join Status", callback_data="check_join")])
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await update.message.reply_text(
-                    "🔒 **Please join our channels first to use this bot:**",
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
-                )
-                return
+                if force_channels:
+                    keyboard = []
+                    for channel in force_channels:
+                        try:
+                            chat = await self.bot.get_chat(channel)
+                            keyboard.append([InlineKeyboardButton(f"Join {chat.title}", url=f"https://t.me/{chat.username}")])
+                        except:
+                            continue
+                    
+                    keyboard.append([InlineKeyboardButton("✅ Check Join Status", callback_data="check_join")])
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await update.message.reply_text(
+                        "🔒 **Please join our channels first to use this bot:**",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                    return
             
             # If campaign number specified, show that campaign
             if campaign_number:
@@ -425,16 +493,14 @@ class WalletBot:
                     return
             
             # Welcome message
-            welcome_msg = await settings_model.get_setting("welcome_message") or """
-🎉 **Welcome to Cashback Wallet Bot!**
+            welcome_msg = await settings_model.get_setting("welcome_message") or """🎉 **Welcome to Cashback Wallet Bot!**
 
 💰 Earn money by completing simple tasks
 💳 Instant payments to your wallet
 👥 Refer friends and earn bonus
 📱 Easy withdrawal system
 
-Click the buttons below to get started:
-            """
+Click the buttons below to get started:"""
             
             keyboard = [
                 [InlineKeyboardButton("💰 My Wallet", callback_data="wallet")],
@@ -448,7 +514,10 @@ Click the buttons below to get started:
             
         except Exception as e:
             logger.error(f"Error in start command: {e}")
-            await update.message.reply_text("❌ An error occurred. Please try again later.")
+            try:
+                await update.message.reply_text("❌ An error occurred. Please try again later.")
+            except:
+                pass
     
     async def wallet_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
@@ -459,22 +528,23 @@ Click the buttons below to get started:
                 await update.message.reply_text("❌ User not found. Please /start first.")
                 return
             
-            wallet_msg = f"""
-💰 **Your Wallet**
+            wallet_msg = f"""💰 **Your Wallet**
 
 💳 **Current Balance:** ₹{user.get('wallet_balance', 0):.2f}
 📊 **Total Earned:** ₹{user.get('total_earned', 0):.2f}
 👥 **Referral Earnings:** ₹{user.get('referral_earnings', 0):.2f}
 🎯 **Total Referrals:** {user.get('total_referrals', 0)}
 
-**Recent Transactions:**
-            """
+**Recent Transactions:**"""
             
             # Get recent transactions
             transactions = await transaction_model.get_user_transactions(user_id)
-            for tx in transactions[:5]:  # Show last 5 transactions
-                tx_type = "+" if tx["amount"] > 0 else ""
-                wallet_msg += f"\n• {tx_type}₹{tx['amount']:.2f} - {tx['description']}"
+            if transactions:
+                for tx in transactions[:5]:  # Show last 5 transactions
+                    tx_type = "+" if tx["amount"] > 0 else ""
+                    wallet_msg += f"\n• {tx_type}₹{tx['amount']:.2f} - {tx['description']}"
+            else:
+                wallet_msg += "\nNo transactions yet."
             
             keyboard = [
                 [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")],
@@ -490,14 +560,21 @@ Click the buttons below to get started:
                 
         except Exception as e:
             logger.error(f"Error in wallet command: {e}")
-            await update.message.reply_text("❌ Error loading wallet. Please try again.")
+            error_msg = "❌ Error loading wallet. Please try again."
+            try:
+                if hasattr(update, 'callback_query') and update.callback_query:
+                    await update.callback_query.edit_message_text(error_msg)
+                else:
+                    await update.message.reply_text(error_msg)
+            except:
+                pass
     
     async def campaigns_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             campaigns = await campaign_model.get_active_campaigns()
             
             if not campaigns:
-                msg = "📋 No active campaigns available right now."
+                msg = "📋 No active campaigns available right now.\n\n💡 Check back later for new earning opportunities!"
                 if hasattr(update, 'callback_query') and update.callback_query:
                     await update.callback_query.edit_message_text(msg)
                 else:
@@ -528,10 +605,13 @@ Click the buttons below to get started:
         except Exception as e:
             logger.error(f"Error in campaigns command: {e}")
             error_msg = "❌ Error loading campaigns. Please try again."
-            if hasattr(update, 'callback_query') and update.callback_query:
-                await update.callback_query.edit_message_text(error_msg)
-            else:
-                await update.message.reply_text(error_msg)
+            try:
+                if hasattr(update, 'callback_query') and update.callback_query:
+                    await update.callback_query.edit_message_text(error_msg)
+                else:
+                    await update.message.reply_text(error_msg)
+            except:
+                pass
     
     async def referral_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
@@ -546,8 +626,7 @@ Click the buttons below to get started:
             bot_username = (await self.bot.get_me()).username
             referral_link = f"https://t.me/{bot_username}?start={user_id}"
             
-            referral_msg = f"""
-👥 **Referral Program**
+            referral_msg = f"""👥 **Referral Program**
 
 🎁 **Earn ₹{referral_amount} for each friend you refer!**
 
@@ -563,8 +642,7 @@ Click the buttons below to get started:
 2. When they join and start using the bot
 3. You get ₹{referral_amount} instantly!
 
-💡 **Tip:** Share in groups and social media to earn more!
-            """
+💡 **Tip:** Share in groups and social media to earn more!"""
             
             keyboard = [
                 [InlineKeyboardButton("📤 Share Link", url=f"https://t.me/share/url?url={referral_link}")],
@@ -579,23 +657,48 @@ Click the buttons below to get started:
                 
         except Exception as e:
             logger.error(f"Error in referral command: {e}")
-            await update.message.reply_text("❌ Error loading referral info. Please try again.")
+            try:
+                await update.message.reply_text("❌ Error loading referral info. Please try again.")
+            except:
+                pass
+    
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            help_msg = """🆘 **Bot Help**
+
+**Available Commands:**
+• /start - Main menu
+• /wallet - Check your balance
+• /campaigns - View available tasks
+• /referral - Your referral program
+• /help - Show this help
+
+**How to Earn:**
+1. 📋 Complete campaigns for instant rewards
+2. 👥 Refer friends and earn bonus
+3. 💸 Withdraw when you reach minimum amount
+
+**Need Support?**
+Contact our admin team for assistance."""
+            
+            await update.message.reply_text(help_msg, parse_mode="Markdown")
+            
+        except Exception as e:
+            logger.error(f"Error in help command: {e}")
     
     async def show_campaign(self, update: Update, context: ContextTypes.DEFAULT_TYPE, campaign: dict):
         try:
-            campaign_msg = f"""
-🎯 **{campaign['title']}**
+            campaign_msg = f"""🎯 **{campaign['title']}**
 
 💰 **Reward:** ₹{campaign['reward']:.2f}
 📝 **Description:**
 {campaign['description']}
 
 **Instructions:**
-{campaign.get('instructions', 'Complete the task as described.')}
-            """
+{campaign.get('instructions', 'Complete the task as described.')}"""
             
             if campaign.get('image_url'):
-                campaign_msg += f"\n🖼️ **Reference Image:** [View]({campaign['image_url']})"
+                campaign_msg += f"\n\n🖼️ **Reference Image:** [View]({campaign['image_url']})"
             
             keyboard = []
             
@@ -619,7 +722,10 @@ Click the buttons below to get started:
                 
         except Exception as e:
             logger.error(f"Error showing campaign: {e}")
-            await update.callback_query.edit_message_text("❌ Error loading campaign details.")
+            try:
+                await update.callback_query.edit_message_text("❌ Error loading campaign details.")
+            except:
+                pass
     
     async def button_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
@@ -628,6 +734,8 @@ Click the buttons below to get started:
             
             data = query.data
             user_id = update.effective_user.id
+            
+            logger.info(f"Button pressed: {data} by user {user_id}")
             
             if data == "wallet":
                 await self.wallet_command(update, context)
@@ -647,11 +755,13 @@ Click the buttons below to get started:
                 campaign = await campaign_model.get_campaign(campaign_id)
                 if campaign:
                     await self.show_campaign(update, context, campaign)
+                else:
+                    await query.edit_message_text("❌ Campaign not found or no longer available.")
             elif data.startswith("upload_"):
                 campaign_id = data.replace("upload_", "")
                 context.user_data["waiting_for_screenshot"] = campaign_id
                 await query.edit_message_text(
-                    "📸 **Upload Screenshot**\n\nPlease send a screenshot of your completed task.",
+                    "📸 **Upload Screenshot**\n\nPlease send a screenshot of your completed task.\n\n⚠️ Make sure the screenshot clearly shows task completion.",
                     parse_mode="Markdown"
                 )
             elif data.startswith("complete_"):
@@ -659,24 +769,30 @@ Click the buttons below to get started:
                 await self.complete_campaign(update, context, campaign_id)
             elif data == "withdraw":
                 await self.show_withdrawal_options(update, context)
+            else:
+                await query.answer("⚠️ Unknown action. Please try again.")
                 
         except Exception as e:
             logger.error(f"Error in button handler: {e}")
-            await query.answer("❌ An error occurred. Please try again.", show_alert=True)
+            try:
+                await query.answer("❌ An error occurred. Please try again.", show_alert=True)
+            except:
+                pass
     
     async def handle_screenshot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             user_id = update.effective_user.id
             
             if "waiting_for_screenshot" not in context.user_data:
-                await update.message.reply_text("❌ Please select a campaign first before uploading screenshots.")
+                await update.message.reply_text("❌ Please select a campaign first before uploading screenshots.\n\nUse /campaigns to see available tasks.")
                 return
             
             campaign_id = context.user_data["waiting_for_screenshot"]
             campaign = await campaign_model.get_campaign(campaign_id)
             
             if not campaign:
-                await update.message.reply_text("❌ Campaign not found.")
+                await update.message.reply_text("❌ Campaign not found or no longer available.")
+                del context.user_data["waiting_for_screenshot"]
                 return
             
             # Save screenshot for admin approval
@@ -685,23 +801,29 @@ Click the buttons below to get started:
             
             # Create submission record
             if db.client:
-                submission = {
-                    "user_id": user_id,
-                    "campaign_id": campaign_id,
-                    "screenshot_file_id": file_id,
-                    "status": "pending",
-                    "submitted_at": datetime.utcnow(),
-                    "amount": campaign["reward"]
-                }
-                
-                submission_collection = db.client.walletbot.submissions
-                await submission_collection.insert_one(submission)
+                try:
+                    submission = {
+                        "user_id": user_id,
+                        "campaign_id": campaign_id,
+                        "screenshot_file_id": file_id,
+                        "status": "pending",
+                        "submitted_at": datetime.utcnow(),
+                        "amount": campaign["reward"],
+                        "campaign_title": campaign["title"]
+                    }
+                    
+                    submission_collection = db.client.walletbot.submissions
+                    await submission_collection.insert_one(submission)
+                    logger.info(f"Screenshot submitted by user {user_id} for campaign {campaign_id}")
+                except Exception as e:
+                    logger.error(f"Error saving submission: {e}")
             
             await update.message.reply_text(
                 f"✅ **Screenshot submitted successfully!**\n\n"
                 f"🎯 Campaign: {campaign['title']}\n"
                 f"💰 Reward: ₹{campaign['reward']:.2f}\n\n"
-                f"⏳ Your submission is under review. You will be notified once approved!",
+                f"⏳ Your submission is under review. You will be notified once approved!\n\n"
+                f"🔄 You can continue with other campaigns while waiting.",
                 parse_mode="Markdown"
             )
             
@@ -710,7 +832,10 @@ Click the buttons below to get started:
             
         except Exception as e:
             logger.error(f"Error handling screenshot: {e}")
-            await update.message.reply_text("❌ Error processing screenshot. Please try again.")
+            try:
+                await update.message.reply_text("❌ Error processing screenshot. Please try again.")
+            except:
+                pass
     
     async def complete_campaign(self, update: Update, context: ContextTypes.DEFAULT_TYPE, campaign_id: str):
         try:
@@ -739,15 +864,19 @@ Click the buttons below to get started:
                     f"🎉 **Congratulations!**\n\n"
                     f"✅ Campaign completed successfully!\n"
                     f"💰 ₹{campaign['reward']:.2f} added to your wallet!\n\n"
-                    f"💳 Check your wallet balance with /wallet",
+                    f"💳 Check your wallet balance with /wallet\n"
+                    f"📋 Continue with more campaigns to earn more!",
                     parse_mode="Markdown"
                 )
             else:
-                await update.callback_query.answer("❌ Error processing reward!", show_alert=True)
+                await update.callback_query.answer("❌ Error processing reward! Please try again.", show_alert=True)
                 
         except Exception as e:
             logger.error(f"Error completing campaign: {e}")
-            await update.callback_query.answer("❌ Error processing completion!", show_alert=True)
+            try:
+                await update.callback_query.answer("❌ Error processing completion!", show_alert=True)
+            except:
+                pass
     
     async def show_withdrawal_options(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
@@ -759,12 +888,14 @@ Click the buttons below to get started:
                 return
             
             min_withdrawal = await settings_model.get_setting("min_withdrawal") or 6
+            balance = user.get("wallet_balance", 0)
             
-            if user.get("wallet_balance", 0) < min_withdrawal:
+            if balance < min_withdrawal:
                 await update.callback_query.edit_message_text(
                     f"❌ **Insufficient Balance**\n\n"
-                    f"💰 Your Balance: ₹{user.get('wallet_balance', 0):.2f}\n"
-                    f"🎯 Minimum Withdrawal: ₹{min_withdrawal}\n\n"
+                    f"💰 Your Balance: ₹{balance:.2f}\n"
+                    f"🎯 Minimum Withdrawal: ₹{min_withdrawal}\n"
+                    f"📈 Need: ₹{min_withdrawal - balance:.2f} more\n\n"
                     f"💡 Complete more campaigns to reach minimum withdrawal amount!",
                     parse_mode="Markdown"
                 )
@@ -780,40 +911,48 @@ Click the buttons below to get started:
             
             await update.callback_query.edit_message_text(
                 f"💸 **Withdrawal Options**\n\n"
-                f"💰 Available Balance: ₹{user.get('wallet_balance', 0):.2f}\n"
+                f"💰 Available Balance: ₹{balance:.2f}\n"
                 f"🎯 Minimum Withdrawal: ₹{min_withdrawal}\n\n"
-                f"Choose your preferred withdrawal method:",
+                f"Choose your preferred withdrawal method:\n\n"
+                f"⚠️ Withdrawals are processed within 24-48 hours.",
                 reply_markup=reply_markup,
                 parse_mode="Markdown"
             )
             
         except Exception as e:
             logger.error(f"Error showing withdrawal options: {e}")
-            await update.callback_query.edit_message_text("❌ Error loading withdrawal options.")
+            try:
+                await update.callback_query.edit_message_text("❌ Error loading withdrawal options.")
+            except:
+                pass
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
-            # Handle any text messages (like withdrawal details, etc.)
             text = update.message.text
             user_id = update.effective_user.id
+            
+            logger.info(f"Message from user {user_id}: {text[:50]}...")
             
             # Default response
             await update.message.reply_text(
                 "👋 Hi! Use the menu buttons or commands to navigate:\n\n"
+                "• /start - Main menu\n"
                 "• /wallet - Check your balance\n"
                 "• /campaigns - View available tasks\n"
                 "• /referral - Your referral program\n"
-                "• /start - Main menu"
+                "• /help - Show help\n\n"
+                "💡 Use the buttons in messages for easier navigation!"
             )
         except Exception as e:
             logger.error(f"Error handling message: {e}")
 
 # Initialize bot with error handling
+wallet_bot = None
 try:
     wallet_bot = WalletBot()
+    logger.info(f"Bot initialization status: {wallet_bot.initialized}")
 except Exception as e:
     logger.error(f"Failed to initialize bot: {e}")
-    wallet_bot = None
 
 # Admin Authentication
 def authenticate_admin(credentials: HTTPBasicCredentials = Depends(security)):
@@ -828,25 +967,32 @@ def authenticate_admin(credentials: HTTPBasicCredentials = Depends(security)):
 async def telegram_webhook(update: dict):
     """Handle Telegram webhook updates"""
     try:
-        if not wallet_bot or not wallet_bot.bot:
+        if not wallet_bot or not wallet_bot.initialized or not wallet_bot.bot:
+            logger.error("Bot not properly initialized")
             return {"status": "error", "message": "Bot not initialized"}
-            
+        
         telegram_update = Update.de_json(update, wallet_bot.bot)
-        await wallet_bot.application.process_update(telegram_update)
-        return {"status": "ok"}
+        if telegram_update:
+            await wallet_bot.application.process_update(telegram_update)
+            return {"status": "ok"}
+        else:
+            logger.warning("Failed to parse telegram update")
+            return {"status": "error", "message": "Invalid update"}
+            
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         return {"status": "error", "message": str(e)}
 
-# Health check endpoint
+# Health check endpoints
 @app.get("/health")
 async def health_check():
     status = {
         "status": "healthy",
         "service": "wallet-bot",
         "timestamp": datetime.utcnow().isoformat(),
-        "mongodb_connected": bool(db.client),
-        "telegram_bot_initialized": bool(wallet_bot and wallet_bot.bot)
+        "mongodb_connected": db.connected,
+        "telegram_bot_initialized": wallet_bot.initialized if wallet_bot else False,
+        "version": "1.0.0"
     }
     return status
 
@@ -856,8 +1002,13 @@ async def root():
         "message": "Telegram Wallet Bot API",
         "status": "running",
         "version": "1.0.0",
-        "mongodb_status": "connected" if db.client else "disconnected",
-        "bot_status": "initialized" if wallet_bot else "error"
+        "mongodb_status": "connected" if db.connected else "disconnected",
+        "bot_status": "initialized" if wallet_bot and wallet_bot.initialized else "error",
+        "endpoints": {
+            "webhook": "/webhook",
+            "health": "/health",
+            "admin": "/api/admin/*"
+        }
     }
 
 # Admin Panel APIs
@@ -879,11 +1030,19 @@ async def get_dashboard(admin: str = Depends(authenticate_admin)):
         pending_submissions = await db.client.walletbot.submissions.count_documents({"status": "pending"})
         total_withdrawals = await db.client.walletbot.transactions.count_documents({"type": "withdrawal"})
         
+        # Calculate total wallet balance
+        pipeline = [
+            {"$group": {"_id": None, "total_balance": {"$sum": "$wallet_balance"}}}
+        ]
+        result = await db.client.walletbot.users.aggregate(pipeline).to_list(length=1)
+        total_balance = result[0]["total_balance"] if result else 0
+        
         return {
             "users_count": users_count,
             "active_campaigns": active_campaigns,
             "pending_submissions": pending_submissions,
             "total_withdrawals": total_withdrawals,
+            "total_wallet_balance": total_balance,
             "status": "ok"
         }
     except Exception as e:
@@ -891,20 +1050,23 @@ async def get_dashboard(admin: str = Depends(authenticate_admin)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/users")
-async def get_users(admin: str = Depends(authenticate_admin)):
-    """Get all users"""
+async def get_users(skip: int = 0, limit: int = 100, admin: str = Depends(authenticate_admin)):
+    """Get all users with pagination"""
     try:
         if not db.client:
-            return {"users": [], "status": "database_disconnected"}
+            return {"users": [], "total": 0, "status": "database_disconnected"}
             
-        cursor = db.client.walletbot.users.find({}).sort("created_at", -1)
+        total = await db.client.walletbot.users.count_documents({})
+        cursor = db.client.walletbot.users.find({}).sort("created_at", -1).skip(skip).limit(limit)
         users = await cursor.to_list(length=None)
         
         # Convert ObjectId to string for JSON serialization
         for user in users:
             user["_id"] = str(user["_id"])
+            # Add formatted date
+            user["created_at_formatted"] = user.get("created_at", datetime.utcnow()).strftime("%Y-%m-%d %H:%M")
         
-        return {"users": users, "status": "ok"}
+        return {"users": users, "total": total, "status": "ok"}
     except Exception as e:
         logger.error(f"Get users error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -933,6 +1095,7 @@ async def create_campaign(
         }
         
         campaign_id = await campaign_model.create_campaign(campaign_data)
+        logger.info(f"Campaign created by admin: {title}")
         return {"status": "success", "campaign_id": campaign_id}
     except Exception as e:
         logger.error(f"Create campaign error: {e}")
@@ -944,9 +1107,10 @@ async def get_campaigns(admin: str = Depends(authenticate_admin)):
     try:
         campaigns = await campaign_model.get_active_campaigns()
         
-        # Convert ObjectId to string
+        # Convert ObjectId to string and add formatted dates
         for campaign in campaigns:
             campaign["_id"] = str(campaign["_id"])
+            campaign["created_at_formatted"] = campaign.get("created_at", datetime.utcnow()).strftime("%Y-%m-%d %H:%M")
         
         return {"campaigns": campaigns, "status": "ok"}
     except Exception as e:
@@ -954,23 +1118,26 @@ async def get_campaigns(admin: str = Depends(authenticate_admin)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/submissions")
-async def get_submissions(admin: str = Depends(authenticate_admin)):
-    """Get all pending submissions"""
+async def get_submissions(status: str = "pending", admin: str = Depends(authenticate_admin)):
+    """Get submissions by status"""
     try:
         if not db.client:
             return {"submissions": [], "status": "database_disconnected"}
-            
-        cursor = db.client.walletbot.submissions.find({"status": "pending"}).sort("submitted_at", -1)
+        
+        query = {"status": status} if status != "all" else {}
+        cursor = db.client.walletbot.submissions.find(query).sort("submitted_at", -1)
         submissions = await cursor.to_list(length=None)
         
         # Get user and campaign details
         for submission in submissions:
             submission["_id"] = str(submission["_id"])
             submission["campaign_id"] = str(submission["campaign_id"])
+            submission["submitted_at_formatted"] = submission.get("submitted_at", datetime.utcnow()).strftime("%Y-%m-%d %H:%M")
             
             # Get user info
             user = await user_model.get_user(submission["user_id"])
             submission["user_name"] = user["first_name"] if user else "Unknown"
+            submission["user_username"] = user.get("username", "N/A") if user else "N/A"
             
             # Get campaign info
             campaign = await campaign_model.get_campaign(submission["campaign_id"])
@@ -997,14 +1164,14 @@ async def approve_submission(submission_id: str, admin: str = Depends(authentica
             submission["user_id"],
             submission["amount"],
             "campaign",
-            f"Screenshot approved for campaign"
+            f"Screenshot approved: {submission.get('campaign_title', 'Campaign')}"
         )
         
         if success:
             # Update submission status
             await db.client.walletbot.submissions.update_one(
                 {"_id": ObjectId(submission_id)},
-                {"$set": {"status": "approved", "approved_at": datetime.utcnow()}}
+                {"$set": {"status": "approved", "approved_at": datetime.utcnow(), "approved_by": admin}}
             )
             
             # Notify user via Telegram
@@ -1013,13 +1180,16 @@ async def approve_submission(submission_id: str, admin: str = Depends(authentica
                     await wallet_bot.bot.send_message(
                         submission["user_id"],
                         f"✅ **Screenshot Approved!**\n\n"
-                        f"💰 ₹{submission['amount']:.2f} has been added to your wallet!\n"
-                        f"💳 Check your balance with /wallet",
+                        f"🎯 Campaign: {submission.get('campaign_title', 'Campaign')}\n"
+                        f"💰 ₹{submission['amount']:.2f} has been added to your wallet!\n\n"
+                        f"💳 Check your balance with /wallet\n"
+                        f"📋 Continue with more campaigns to earn more!",
                         parse_mode="Markdown"
                     )
-            except:
-                pass  # User might have blocked the bot
+            except Exception as notify_error:
+                logger.warning(f"Could not notify user {submission['user_id']}: {notify_error}")
             
+            logger.info(f"Submission approved by {admin}: {submission_id}")
             return {"status": "approved"}
         else:
             raise HTTPException(status_code=500, detail="Error processing approval")
@@ -1041,7 +1211,12 @@ async def reject_submission(submission_id: str, reason: str = Form(...), admin: 
         # Update submission status
         await db.client.walletbot.submissions.update_one(
             {"_id": ObjectId(submission_id)},
-            {"$set": {"status": "rejected", "rejection_reason": reason, "rejected_at": datetime.utcnow()}}
+            {"$set": {
+                "status": "rejected", 
+                "rejection_reason": reason, 
+                "rejected_at": datetime.utcnow(),
+                "rejected_by": admin
+            }}
         )
         
         # Notify user via Telegram
@@ -1050,13 +1225,16 @@ async def reject_submission(submission_id: str, reason: str = Form(...), admin: 
                 await wallet_bot.bot.send_message(
                     submission["user_id"],
                     f"❌ **Screenshot Rejected**\n\n"
+                    f"🎯 Campaign: {submission.get('campaign_title', 'Campaign')}\n"
                     f"**Reason:** {reason}\n\n"
-                    f"💡 Please try again with a proper screenshot.",
+                    f"💡 Please review the task requirements and try again with a proper screenshot.\n"
+                    f"📋 You can resubmit for this campaign.",
                     parse_mode="Markdown"
                 )
-        except:
-            pass
+        except Exception as notify_error:
+            logger.warning(f"Could not notify user {submission['user_id']}: {notify_error}")
         
+        logger.info(f"Submission rejected by {admin}: {submission_id} - {reason}")
         return {"status": "rejected"}
     except Exception as e:
         logger.error(f"Reject submission error: {e}")
@@ -1078,9 +1256,11 @@ async def get_settings(admin: str = Depends(authenticate_admin)):
         default_settings = {
             "min_withdrawal": 6,
             "referral_amount": 10,
-            "welcome_message": "🎉 Welcome to Cashback Wallet Bot!",
+            "welcome_message": "🎉 Welcome to Cashback Wallet Bot!\n\n💰 Earn money by completing simple tasks\n💳 Instant payments to your wallet\n👥 Refer friends and earn bonus\n📱 Easy withdrawal system\n\nClick the buttons below to get started:",
             "force_channels": [],
-            "payment_gateway_api": ""
+            "payment_gateway_api": "",
+            "support_username": "",
+            "bot_status": "active"
         }
         
         for key, value in default_settings.items():
@@ -1093,37 +1273,100 @@ async def get_settings(admin: str = Depends(authenticate_admin)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/admin/settings")
-async def update_settings(settings: dict, admin: str = Depends(authenticate_admin)):
+async def update_settings(settings_data: dict, admin: str = Depends(authenticate_admin)):
     """Update settings"""
     try:
-        for key, value in settings.items():
-            await settings_model.update_setting(key, value)
+        updated_count = 0
+        for key, value in settings_data.items():
+            success = await settings_model.update_setting(key, value)
+            if success:
+                updated_count += 1
         
-        return {"status": "updated"}
+        logger.info(f"Settings updated by {admin}: {updated_count} settings")
+        return {"status": "updated", "updated_count": updated_count}
     except Exception as e:
         logger.error(f"Update settings error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Campaign management
+@app.delete("/api/admin/campaigns/{campaign_id}")
+async def delete_campaign(campaign_id: str, admin: str = Depends(authenticate_admin)):
+    """Delete/deactivate a campaign"""
+    try:
+        if not db.client:
+            raise HTTPException(status_code=500, detail="Database not connected")
+        
+        result = await campaign_model.update_campaign(campaign_id, {"is_active": False})
+        if result:
+            logger.info(f"Campaign deactivated by {admin}: {campaign_id}")
+            return {"status": "deactivated"}
+        else:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+    except Exception as e:
+        logger.error(f"Delete campaign error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# User management
+@app.post("/api/admin/users/{user_id}/add_balance")
+async def add_user_balance(
+    user_id: int, 
+    amount: float = Form(...), 
+    description: str = Form(...), 
+    admin: str = Depends(authenticate_admin)
+):
+    """Add balance to user wallet"""
+    try:
+        success = await user_model.add_to_wallet(user_id, amount, "admin_add", f"Admin bonus: {description}")
+        if success:
+            logger.info(f"Balance added by {admin}: ₹{amount} to user {user_id}")
+            return {"status": "success", "message": f"₹{amount} added to user wallet"}
+        else:
+            raise HTTPException(status_code=404, detail="User not found or error processing")
+    except Exception as e:
+        logger.error(f"Add balance error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Startup and shutdown events
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting up application...")
+    logger.info("Starting up Wallet Bot API...")
+    
+    # Connect to MongoDB
     await connect_to_mongo()
     
-    # Set webhook if URL provided
-    if WEBHOOK_URL and wallet_bot and wallet_bot.bot:
+    # Set webhook if URL provided and bot is initialized
+    if WEBHOOK_URL and wallet_bot and wallet_bot.initialized and wallet_bot.bot:
         try:
             webhook_url = f"{WEBHOOK_URL}/webhook"
-            await wallet_bot.bot.set_webhook(webhook_url)
-            logger.info(f"Webhook set to: {webhook_url}")
+            result = await wallet_bot.bot.set_webhook(webhook_url)
+            if result:
+                logger.info(f"Webhook set successfully: {webhook_url}")
+            else:
+                logger.warning("Failed to set webhook")
         except Exception as e:
             logger.error(f"Error setting webhook: {e}")
+    
+    logger.info("Startup completed")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Shutting down application...")
+    logger.info("Shutting down Wallet Bot API...")
+    
+    # Close MongoDB connection
     await close_mongo_connection()
+    
+    # Remove webhook
+    if wallet_bot and wallet_bot.bot:
+        try:
+            await wallet_bot.bot.delete_webhook()
+            logger.info("Webhook removed")
+        except Exception as e:
+            logger.warning(f"Error removing webhook: {e}")
+    
+    logger.info("Shutdown completed")
 
+# Run the application
 if __name__ == "__main__":
     import uvicorn
+    logger.info(f"Starting server on port {PORT}")
     uvicorn.run(app, host="0.0.0.0", port=PORT)
