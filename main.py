@@ -1334,17 +1334,41 @@ async def startup_event():
     # Connect to MongoDB
     await connect_to_mongo()
     
-    # Set webhook if URL provided and bot is initialized
-    if WEBHOOK_URL and wallet_bot and wallet_bot.initialized and wallet_bot.bot:
-        try:
-            webhook_url = f"{WEBHOOK_URL}/webhook"
-            result = await wallet_bot.bot.set_webhook(webhook_url)
-            if result:
-                logger.info(f"Webhook set successfully: {webhook_url}")
-            else:
-                logger.warning("Failed to set webhook")
-        except Exception as e:
-            logger.error(f"Error setting webhook: {e}")
+    # Force webhook setup with retry logic
+    if wallet_bot and wallet_bot.initialized and wallet_bot.bot:
+        webhook_url = f"{WEBHOOK_URL}/webhook" if WEBHOOK_URL else None
+        
+        if webhook_url:
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    # Delete existing webhook first
+                    await wallet_bot.bot.delete_webhook(drop_pending_updates=True)
+                    await asyncio.sleep(1)
+                    
+                    # Set new webhook
+                    result = await wallet_bot.bot.set_webhook(
+                        url=webhook_url,
+                        allowed_updates=["message", "callback_query"],
+                        drop_pending_updates=True
+                    )
+                    
+                    if result:
+                        logger.info(f"Webhook set successfully: {webhook_url}")
+                        
+                        # Verify webhook
+                        webhook_info = await wallet_bot.bot.get_webhook_info()
+                        logger.info(f"Webhook info: {webhook_info}")
+                        break
+                    else:
+                        logger.warning(f"Webhook setup failed on attempt {attempt + 1}")
+                        
+                except Exception as e:
+                    logger.error(f"Webhook setup error on attempt {attempt + 1}: {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2)
+        else:
+            logger.error("WEBHOOK_URL not set - bot will not receive updates")
     
     logger.info("Startup completed")
 
