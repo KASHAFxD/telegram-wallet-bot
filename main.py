@@ -995,8 +995,13 @@ async def telegram_webhook(update: dict):
 @app.get("/health")
 async def health_check():
     app_initialized = False
+    bot_initialized = False
+    
     if wallet_bot and wallet_bot.application:
         app_initialized = hasattr(wallet_bot.application, '_initialized') and wallet_bot.application._initialized
+    
+    if wallet_bot and wallet_bot.bot:
+        bot_initialized = hasattr(wallet_bot.bot, '_initialized') and wallet_bot.bot._initialized
     
     status = {
         "status": "healthy",
@@ -1005,6 +1010,7 @@ async def health_check():
         "mongodb_connected": db.connected,
         "telegram_bot_initialized": wallet_bot.initialized if wallet_bot else False,
         "telegram_app_initialized": app_initialized,
+        "telegram_bot_object_initialized": bot_initialized,
         "version": "1.0.0"
     }
     return status
@@ -1339,7 +1345,7 @@ async def add_user_balance(
         logger.error(f"Add balance error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Startup and shutdown events (FIXED VERSION WITH APPLICATION.INITIALIZE())
+# Startup and shutdown events (FINAL FIXED VERSION WITH BOT.INITIALIZE())
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting up Wallet Bot API...")
@@ -1350,7 +1356,11 @@ async def startup_event():
     # Initialize and start the Telegram Application
     if wallet_bot and wallet_bot.application:
         try:
-            # Critical: Initialize the application first
+            # Initialize the Bot object first (CRITICAL FIX)
+            await wallet_bot.bot.initialize()
+            logger.info("Telegram Bot initialized successfully")
+            
+            # Initialize the application
             await wallet_bot.application.initialize()
             logger.info("Telegram Application initialized successfully")
             
@@ -1406,7 +1416,10 @@ async def shutdown_event():
             # Stop and shutdown application
             await wallet_bot.application.stop()
             await wallet_bot.application.shutdown()
-            logger.info("Telegram Application shutdown completed")
+            
+            # Shutdown bot (ADDED)
+            await wallet_bot.bot.shutdown()
+            logger.info("Telegram Application and Bot shutdown completed")
             
         except Exception as e:
             logger.warning(f"Error during application shutdown: {e}")
