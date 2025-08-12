@@ -93,15 +93,15 @@ async def close_mongo_connection():
         db.client.close()
         logger.info("MongoDB connection closed")
 
-# Database Models with safety checks
+# Database Models with FIXED collection validation
 class UserModel:
     def __init__(self):
         self.collection = None
-        if db.client:
+        if db.client is not None:
             self.collection = db.client.walletbot.users
     
     async def create_user(self, user_data: dict):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             logger.warning("UserModel: Collection not available")
             return None
             
@@ -121,7 +121,7 @@ class UserModel:
             return None
     
     async def get_user(self, user_id: int):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             return None
         try:
             return await self.collection.find_one({"user_id": user_id})
@@ -130,7 +130,7 @@ class UserModel:
             return None
     
     async def update_user(self, user_id: int, update_data: dict):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             return False
         try:
             update_data["updated_at"] = datetime.utcnow()
@@ -144,7 +144,7 @@ class UserModel:
             return False
     
     async def add_to_wallet(self, user_id: int, amount: float, transaction_type: str, description: str):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             logger.warning("Cannot add to wallet - database not connected")
             return False
             
@@ -194,11 +194,11 @@ class UserModel:
 class CampaignModel:
     def __init__(self):
         self.collection = None
-        if db.client:
+        if db.client is not None:
             self.collection = db.client.walletbot.campaigns
     
     async def create_campaign(self, campaign_data: dict):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             return None
         try:
             campaign_data["created_at"] = datetime.utcnow()
@@ -212,7 +212,7 @@ class CampaignModel:
             return None
     
     async def get_campaign(self, campaign_id: str):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             return None
         try:
             return await self.collection.find_one({"_id": ObjectId(campaign_id)})
@@ -221,7 +221,7 @@ class CampaignModel:
             return None
     
     async def get_campaign_by_number(self, campaign_number: int):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             return None
         try:
             return await self.collection.find_one({"campaign_number": campaign_number})
@@ -230,7 +230,7 @@ class CampaignModel:
             return None
     
     async def get_active_campaigns(self):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             return []
         try:
             cursor = self.collection.find({"is_active": True})
@@ -241,7 +241,7 @@ class CampaignModel:
             return []
     
     async def update_campaign(self, campaign_id: str, update_data: dict):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             return False
         try:
             update_data["updated_at"] = datetime.utcnow()
@@ -257,11 +257,11 @@ class CampaignModel:
 class TransactionModel:
     def __init__(self):
         self.collection = None
-        if db.client:
+        if db.client is not None:
             self.collection = db.client.walletbot.transactions
     
     async def create_transaction(self, transaction_data: dict):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             return None
         try:
             transaction_data["created_at"] = datetime.utcnow()
@@ -272,7 +272,7 @@ class TransactionModel:
             return None
     
     async def get_user_transactions(self, user_id: int):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             return []
         try:
             cursor = self.collection.find({"user_id": user_id}).sort("created_at", -1)
@@ -284,11 +284,11 @@ class TransactionModel:
 class SettingsModel:
     def __init__(self):
         self.collection = None
-        if db.client:
+        if db.client is not None:
             self.collection = db.client.walletbot.settings
     
     async def get_setting(self, key: str):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             # Return default values
             defaults = {
                 "referral_amount": 10,
@@ -306,7 +306,7 @@ class SettingsModel:
             return None
     
     async def update_setting(self, key: str, value):
-        if not self.collection:
+        if self.collection is None:  # FIXED: Proper None check
             return False
         try:
             await self.collection.update_one(
@@ -354,7 +354,7 @@ class WalletBot:
             self.initialized = False
     
     def setup_handlers(self):
-        if not self.application:
+        if self.application is None:
             logger.error("Application not initialized, skipping handler setup")
             return
             
@@ -800,7 +800,7 @@ Contact our admin team for assistance."""
             file_id = photo.file_id
             
             # Create submission record
-            if db.client:
+            if db.client is not None:
                 try:
                     submission = {
                         "user_id": user_id,
@@ -968,7 +968,7 @@ async def telegram_webhook(update: dict):
     """Handle Telegram webhook updates"""
     try:
         # Check if application is properly initialized
-        if not wallet_bot or not wallet_bot.application:
+        if not wallet_bot or wallet_bot.application is None:
             logger.error("Application not available")
             return {"status": "error", "message": "Application not available"}
         
@@ -997,10 +997,10 @@ async def health_check():
     app_initialized = False
     bot_initialized = False
     
-    if wallet_bot and wallet_bot.application:
+    if wallet_bot and wallet_bot.application is not None:
         app_initialized = hasattr(wallet_bot.application, '_initialized') and wallet_bot.application._initialized
     
-    if wallet_bot and wallet_bot.bot:
+    if wallet_bot and wallet_bot.bot is not None:
         bot_initialized = hasattr(wallet_bot.bot, '_initialized') and wallet_bot.bot._initialized
     
     status = {
@@ -1035,7 +1035,7 @@ async def root():
 async def get_dashboard(admin: str = Depends(authenticate_admin)):
     """Get admin dashboard stats"""
     try:
-        if not db.client:
+        if db.client is None:
             return {
                 "users_count": 0,
                 "active_campaigns": 0,
@@ -1072,7 +1072,7 @@ async def get_dashboard(admin: str = Depends(authenticate_admin)):
 async def get_users(skip: int = 0, limit: int = 100, admin: str = Depends(authenticate_admin)):
     """Get all users with pagination"""
     try:
-        if not db.client:
+        if db.client is None:
             return {"users": [], "total": 0, "status": "database_disconnected"}
             
         total = await db.client.walletbot.users.count_documents({})
@@ -1140,7 +1140,7 @@ async def get_campaigns(admin: str = Depends(authenticate_admin)):
 async def get_submissions(status: str = "pending", admin: str = Depends(authenticate_admin)):
     """Get submissions by status"""
     try:
-        if not db.client:
+        if db.client is None:
             return {"submissions": [], "status": "database_disconnected"}
         
         query = {"status": status} if status != "all" else {}
@@ -1171,7 +1171,7 @@ async def get_submissions(status: str = "pending", admin: str = Depends(authenti
 async def approve_submission(submission_id: str, admin: str = Depends(authenticate_admin)):
     """Approve a submission"""
     try:
-        if not db.client:
+        if db.client is None:
             raise HTTPException(status_code=500, detail="Database not connected")
             
         submission = await db.client.walletbot.submissions.find_one({"_id": ObjectId(submission_id)})
@@ -1195,7 +1195,7 @@ async def approve_submission(submission_id: str, admin: str = Depends(authentica
             
             # Notify user via Telegram
             try:
-                if wallet_bot and wallet_bot.bot:
+                if wallet_bot and wallet_bot.bot is not None:
                     await wallet_bot.bot.send_message(
                         submission["user_id"],
                         f"✅ **Screenshot Approved!**\n\n"
@@ -1220,7 +1220,7 @@ async def approve_submission(submission_id: str, admin: str = Depends(authentica
 async def reject_submission(submission_id: str, reason: str = Form(...), admin: str = Depends(authenticate_admin)):
     """Reject a submission"""
     try:
-        if not db.client:
+        if db.client is None:
             raise HTTPException(status_code=500, detail="Database not connected")
             
         submission = await db.client.walletbot.submissions.find_one({"_id": ObjectId(submission_id)})
@@ -1240,7 +1240,7 @@ async def reject_submission(submission_id: str, reason: str = Form(...), admin: 
         
         # Notify user via Telegram
         try:
-            if wallet_bot and wallet_bot.bot:
+            if wallet_bot and wallet_bot.bot is not None:
                 await wallet_bot.bot.send_message(
                     submission["user_id"],
                     f"❌ **Screenshot Rejected**\n\n"
@@ -1265,7 +1265,7 @@ async def get_settings(admin: str = Depends(authenticate_admin)):
     try:
         settings = {}
         
-        if db.client:
+        if db.client is not None:
             # Get all settings
             cursor = db.client.walletbot.settings.find({})
             async for setting in cursor:
@@ -1312,7 +1312,7 @@ async def update_settings(settings_data: dict, admin: str = Depends(authenticate
 async def delete_campaign(campaign_id: str, admin: str = Depends(authenticate_admin)):
     """Delete/deactivate a campaign"""
     try:
-        if not db.client:
+        if db.client is None:
             raise HTTPException(status_code=500, detail="Database not connected")
         
         result = await campaign_model.update_campaign(campaign_id, {"is_active": False})
@@ -1345,7 +1345,7 @@ async def add_user_balance(
         logger.error(f"Add balance error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Startup and shutdown events (FINAL FIXED VERSION WITH BOT.INITIALIZE())
+# Startup and shutdown events (FINAL FIXED VERSION WITH ALL FIXES)
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting up Wallet Bot API...")
@@ -1354,7 +1354,7 @@ async def startup_event():
     await connect_to_mongo()
     
     # Initialize and start the Telegram Application
-    if wallet_bot and wallet_bot.application:
+    if wallet_bot and wallet_bot.application is not None:
         try:
             # Initialize the Bot object first (CRITICAL FIX)
             await wallet_bot.bot.initialize()
@@ -1369,7 +1369,7 @@ async def startup_event():
             logger.info("Telegram Application started successfully")
             
             # Set webhook if URL is provided
-            if WEBHOOK_URL and wallet_bot.bot:
+            if WEBHOOK_URL and wallet_bot.bot is not None:
                 webhook_url = f"{WEBHOOK_URL}/webhook"
                 
                 # Delete existing webhook first
@@ -1406,10 +1406,10 @@ async def shutdown_event():
     logger.info("Shutting down Wallet Bot API...")
     
     # Properly shutdown the Telegram Application
-    if wallet_bot and wallet_bot.application:
+    if wallet_bot and wallet_bot.application is not None:
         try:
             # Remove webhook
-            if wallet_bot.bot:
+            if wallet_bot.bot is not None:
                 await wallet_bot.bot.delete_webhook()
                 logger.info("Webhook removed")
             
@@ -1418,7 +1418,8 @@ async def shutdown_event():
             await wallet_bot.application.shutdown()
             
             # Shutdown bot (ADDED)
-            await wallet_bot.bot.shutdown()
+            if wallet_bot.bot is not None:
+                await wallet_bot.bot.shutdown()
             logger.info("Telegram Application and Bot shutdown completed")
             
         except Exception as e:
