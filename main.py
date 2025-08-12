@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from motor.motor_asyncio import AsyncIOMotorClient
-from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 import asyncio
 import os
@@ -62,6 +62,8 @@ class Database:
         
         if mongodb_url:
             try:
+                # Clean the URL - remove any trailing newlines or spaces
+                mongodb_url = mongodb_url.strip()
                 self.client = AsyncIOMotorClient(mongodb_url)
                 self.connected = True
                 logger.info("MongoDB client initialized successfully")
@@ -101,7 +103,7 @@ class UserModel:
             self.collection = db.client.walletbot.users
     
     async def create_user(self, user_data: dict):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             logger.warning("UserModel: Collection not available")
             return None
             
@@ -121,7 +123,7 @@ class UserModel:
             return None
     
     async def get_user(self, user_id: int):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             return None
         try:
             return await self.collection.find_one({"user_id": user_id})
@@ -130,7 +132,7 @@ class UserModel:
             return None
     
     async def update_user(self, user_id: int, update_data: dict):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             return False
         try:
             update_data["updated_at"] = datetime.utcnow()
@@ -144,7 +146,7 @@ class UserModel:
             return False
     
     async def add_to_wallet(self, user_id: int, amount: float, transaction_type: str, description: str):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             logger.warning("Cannot add to wallet - database not connected")
             return False
             
@@ -198,7 +200,7 @@ class CampaignModel:
             self.collection = db.client.walletbot.campaigns
     
     async def create_campaign(self, campaign_data: dict):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             return None
         try:
             campaign_data["created_at"] = datetime.utcnow()
@@ -212,7 +214,7 @@ class CampaignModel:
             return None
     
     async def get_campaign(self, campaign_id: str):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             return None
         try:
             return await self.collection.find_one({"_id": ObjectId(campaign_id)})
@@ -221,7 +223,7 @@ class CampaignModel:
             return None
     
     async def get_campaign_by_number(self, campaign_number: int):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             return None
         try:
             return await self.collection.find_one({"campaign_number": campaign_number})
@@ -230,7 +232,7 @@ class CampaignModel:
             return None
     
     async def get_active_campaigns(self):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             return []
         try:
             cursor = self.collection.find({"is_active": True})
@@ -241,7 +243,7 @@ class CampaignModel:
             return []
     
     async def update_campaign(self, campaign_id: str, update_data: dict):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             return False
         try:
             update_data["updated_at"] = datetime.utcnow()
@@ -261,7 +263,7 @@ class TransactionModel:
             self.collection = db.client.walletbot.transactions
     
     async def create_transaction(self, transaction_data: dict):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             return None
         try:
             transaction_data["created_at"] = datetime.utcnow()
@@ -272,7 +274,7 @@ class TransactionModel:
             return None
     
     async def get_user_transactions(self, user_id: int):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             return []
         try:
             cursor = self.collection.find({"user_id": user_id}).sort("created_at", -1)
@@ -288,7 +290,7 @@ class SettingsModel:
             self.collection = db.client.walletbot.settings
     
     async def get_setting(self, key: str):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             # Return default values
             defaults = {
                 "referral_amount": 10,
@@ -306,7 +308,7 @@ class SettingsModel:
             return None
     
     async def update_setting(self, key: str, value):
-        if self.collection is None:  # FIXED: Proper None check
+        if self.collection is None:
             return False
         try:
             await self.collection.update_one(
@@ -325,7 +327,7 @@ campaign_model = CampaignModel()
 transaction_model = TransactionModel()
 settings_model = SettingsModel()
 
-# Telegram Bot Setup (Fixed version)
+# Telegram Bot Setup with Reply Keyboard
 class WalletBot:
     def __init__(self):
         self.bot = None
@@ -375,6 +377,21 @@ class WalletBot:
             
         except Exception as e:
             logger.error(f"Error setting up handlers: {e}")
+    
+    def get_reply_keyboard(self):
+        """Get permanent reply keyboard that stays at bottom"""
+        keyboard = [
+            [KeyboardButton("💰 My Wallet"), KeyboardButton("📋 Campaigns")],
+            [KeyboardButton("👥 Referral"), KeyboardButton("💸 Withdraw")],
+            [KeyboardButton("🆘 Help"), KeyboardButton("⚙️ Settings")]
+        ]
+        
+        return ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=True,
+            persistent=True,
+            one_time_keyboard=False
+        )
     
     async def check_force_join(self, user_id: int) -> bool:
         """Check if user has joined all required channels"""
@@ -502,20 +519,36 @@ class WalletBot:
 
 Click the buttons below to get started:"""
             
-            keyboard = [
+            # Inline buttons
+            inline_keyboard = [
                 [InlineKeyboardButton("💰 My Wallet", callback_data="wallet")],
                 [InlineKeyboardButton("📋 Campaigns", callback_data="campaigns")],
                 [InlineKeyboardButton("👥 Referral", callback_data="referral")],
                 [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw")]
             ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            inline_reply_markup = InlineKeyboardMarkup(inline_keyboard)
             
-            await update.message.reply_text(welcome_msg, reply_markup=reply_markup, parse_mode="Markdown")
+            # Send welcome message with inline keyboard
+            await update.message.reply_text(
+                welcome_msg, 
+                reply_markup=inline_reply_markup, 
+                parse_mode="Markdown"
+            )
+            
+            # Set permanent keyboard menu (THIS IS THE KEY ADDITION)
+            await update.message.reply_text(
+                "🎯 **Use the menu buttons below for quick access:**",
+                reply_markup=self.get_reply_keyboard(),
+                parse_mode="Markdown"
+            )
             
         except Exception as e:
             logger.error(f"Error in start command: {e}")
             try:
-                await update.message.reply_text("❌ An error occurred. Please try again later.")
+                await update.message.reply_text(
+                    "❌ An error occurred. Please try again later.",
+                    reply_markup=self.get_reply_keyboard()
+                )
             except:
                 pass
     
@@ -525,7 +558,11 @@ Click the buttons below to get started:"""
             user = await user_model.get_user(user_id)
             
             if not user:
-                await update.message.reply_text("❌ User not found. Please /start first.")
+                message_text = "❌ User not found. Please /start first."
+                if hasattr(update, 'callback_query') and update.callback_query:
+                    await update.callback_query.edit_message_text(message_text)
+                else:
+                    await update.message.reply_text(message_text, reply_markup=self.get_reply_keyboard())
                 return
             
             wallet_msg = f"""💰 **Your Wallet**
@@ -554,7 +591,13 @@ Click the buttons below to get started:"""
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             if hasattr(update, 'callback_query') and update.callback_query:
-                await update.callback_query.edit_message_text(wallet_msg, reply_markup=reply_markup, parse_mode="Markdown")
+                try:
+                    await update.callback_query.edit_message_text(wallet_msg, reply_markup=reply_markup, parse_mode="Markdown")
+                except Exception as edit_error:
+                    if "Message is not modified" in str(edit_error):
+                        await update.callback_query.answer("Already up to date! ✅")
+                    else:
+                        await update.callback_query.edit_message_text(wallet_msg, reply_markup=reply_markup, parse_mode="Markdown")
             else:
                 await update.message.reply_text(wallet_msg, reply_markup=reply_markup, parse_mode="Markdown")
                 
@@ -565,7 +608,7 @@ Click the buttons below to get started:"""
                 if hasattr(update, 'callback_query') and update.callback_query:
                     await update.callback_query.edit_message_text(error_msg)
                 else:
-                    await update.message.reply_text(error_msg)
+                    await update.message.reply_text(error_msg, reply_markup=self.get_reply_keyboard())
             except:
                 pass
     
@@ -578,7 +621,7 @@ Click the buttons below to get started:"""
                 if hasattr(update, 'callback_query') and update.callback_query:
                     await update.callback_query.edit_message_text(msg)
                 else:
-                    await update.message.reply_text(msg)
+                    await update.message.reply_text(msg, reply_markup=self.get_reply_keyboard())
                 return
             
             campaigns_msg = "📋 **Available Campaigns:**\n\n"
@@ -609,7 +652,7 @@ Click the buttons below to get started:"""
                 if hasattr(update, 'callback_query') and update.callback_query:
                     await update.callback_query.edit_message_text(error_msg)
                 else:
-                    await update.message.reply_text(error_msg)
+                    await update.message.reply_text(error_msg, reply_markup=self.get_reply_keyboard())
             except:
                 pass
     
@@ -619,7 +662,11 @@ Click the buttons below to get started:"""
             user = await user_model.get_user(user_id)
             
             if not user:
-                await update.message.reply_text("❌ User not found. Please /start first.")
+                message_text = "❌ User not found. Please /start first."
+                if hasattr(update, 'callback_query') and update.callback_query:
+                    await update.callback_query.edit_message_text(message_text)
+                else:
+                    await update.message.reply_text(message_text, reply_markup=self.get_reply_keyboard())
                 return
             
             referral_amount = await settings_model.get_setting("referral_amount") or 10
@@ -658,7 +705,11 @@ Click the buttons below to get started:"""
         except Exception as e:
             logger.error(f"Error in referral command: {e}")
             try:
-                await update.message.reply_text("❌ Error loading referral info. Please try again.")
+                message_text = "❌ Error loading referral info. Please try again."
+                if hasattr(update, 'callback_query') and update.callback_query:
+                    await update.callback_query.edit_message_text(message_text)
+                else:
+                    await update.message.reply_text(message_text, reply_markup=self.get_reply_keyboard())
             except:
                 pass
     
@@ -681,10 +732,52 @@ Click the buttons below to get started:"""
 **Need Support?**
 Contact our admin team for assistance."""
             
-            await update.message.reply_text(help_msg, parse_mode="Markdown")
+            await update.message.reply_text(help_msg, reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
             
         except Exception as e:
             logger.error(f"Error in help command: {e}")
+    
+    async def show_user_settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            user_id = update.effective_user.id
+            user = await user_model.get_user(user_id)
+            
+            if not user:
+                await update.message.reply_text("❌ User not found. Please /start first.", reply_markup=self.get_reply_keyboard())
+                return
+            
+            settings_msg = f"""⚙️ **Bot Settings**
+
+👤 **Your Info:**
+• Name: {user.get('first_name', 'Unknown')}
+• Username: @{user.get('username', 'N/A')}
+• User ID: {user_id}
+
+📊 **Account Stats:**
+• Member Since: {user.get('created_at', datetime.utcnow()).strftime('%Y-%m-%d')}
+• Total Referrals: {user.get('total_referrals', 0)}
+• Total Earned: ₹{user.get('total_earned', 0):.2f}
+
+🔧 **Bot Features:**
+• ✅ Wallet System Active
+• ✅ Referral System Active  
+• ✅ Campaign System Active
+• ✅ Withdrawal System Active"""
+            
+            keyboard = [
+                [InlineKeyboardButton("🔄 Refresh Stats", callback_data="refresh_settings")],
+                [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                settings_msg,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in settings command: {e}")
     
     async def show_campaign(self, update: Update, context: ContextTypes.DEFAULT_TYPE, campaign: dict):
         try:
@@ -743,6 +836,10 @@ Contact our admin team for assistance."""
                 await self.campaigns_command(update, context)
             elif data == "referral":
                 await self.referral_command(update, context)
+            elif data == "refresh_settings":
+                await self.show_user_settings(update, context)
+            elif data == "main_menu":
+                await self.start_command(update, context)
             elif data == "check_join":
                 if await self.check_force_join(user_id):
                     await query.edit_message_text("✅ Great! You have joined all channels. Now you can use the bot!")
@@ -784,14 +881,17 @@ Contact our admin team for assistance."""
             user_id = update.effective_user.id
             
             if "waiting_for_screenshot" not in context.user_data:
-                await update.message.reply_text("❌ Please select a campaign first before uploading screenshots.\n\nUse /campaigns to see available tasks.")
+                await update.message.reply_text(
+                    "❌ Please select a campaign first before uploading screenshots.\n\nUse /campaigns to see available tasks.",
+                    reply_markup=self.get_reply_keyboard()
+                )
                 return
             
             campaign_id = context.user_data["waiting_for_screenshot"]
             campaign = await campaign_model.get_campaign(campaign_id)
             
             if not campaign:
-                await update.message.reply_text("❌ Campaign not found or no longer available.")
+                await update.message.reply_text("❌ Campaign not found or no longer available.", reply_markup=self.get_reply_keyboard())
                 del context.user_data["waiting_for_screenshot"]
                 return
             
@@ -824,6 +924,7 @@ Contact our admin team for assistance."""
                 f"💰 Reward: ₹{campaign['reward']:.2f}\n\n"
                 f"⏳ Your submission is under review. You will be notified once approved!\n\n"
                 f"🔄 You can continue with other campaigns while waiting.",
+                reply_markup=self.get_reply_keyboard(),
                 parse_mode="Markdown"
             )
             
@@ -833,7 +934,7 @@ Contact our admin team for assistance."""
         except Exception as e:
             logger.error(f"Error handling screenshot: {e}")
             try:
-                await update.message.reply_text("❌ Error processing screenshot. Please try again.")
+                await update.message.reply_text("❌ Error processing screenshot. Please try again.", reply_markup=self.get_reply_keyboard())
             except:
                 pass
     
@@ -884,21 +985,27 @@ Contact our admin team for assistance."""
             user = await user_model.get_user(user_id)
             
             if not user:
-                await update.callback_query.edit_message_text("❌ User not found.")
+                message_text = "❌ User not found."
+                if hasattr(update, 'callback_query') and update.callback_query:
+                    await update.callback_query.edit_message_text(message_text)
+                else:
+                    await update.message.reply_text(message_text, reply_markup=self.get_reply_keyboard())
                 return
             
             min_withdrawal = await settings_model.get_setting("min_withdrawal") or 6
             balance = user.get("wallet_balance", 0)
             
             if balance < min_withdrawal:
-                await update.callback_query.edit_message_text(
-                    f"❌ **Insufficient Balance**\n\n"
-                    f"💰 Your Balance: ₹{balance:.2f}\n"
-                    f"🎯 Minimum Withdrawal: ₹{min_withdrawal}\n"
-                    f"📈 Need: ₹{min_withdrawal - balance:.2f} more\n\n"
-                    f"💡 Complete more campaigns to reach minimum withdrawal amount!",
-                    parse_mode="Markdown"
-                )
+                insufficient_msg = f"❌ **Insufficient Balance**\n\n" \
+                                 f"💰 Your Balance: ₹{balance:.2f}\n" \
+                                 f"🎯 Minimum Withdrawal: ₹{min_withdrawal}\n" \
+                                 f"📈 Need: ₹{min_withdrawal - balance:.2f} more\n\n" \
+                                 f"💡 Complete more campaigns to reach minimum withdrawal amount!"
+                
+                if hasattr(update, 'callback_query') and update.callback_query:
+                    await update.callback_query.edit_message_text(insufficient_msg, parse_mode="Markdown")
+                else:
+                    await update.message.reply_text(insufficient_msg, reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
                 return
             
             keyboard = [
@@ -909,20 +1016,25 @@ Contact our admin team for assistance."""
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            await update.callback_query.edit_message_text(
-                f"💸 **Withdrawal Options**\n\n"
-                f"💰 Available Balance: ₹{balance:.2f}\n"
-                f"🎯 Minimum Withdrawal: ₹{min_withdrawal}\n\n"
-                f"Choose your preferred withdrawal method:\n\n"
-                f"⚠️ Withdrawals are processed within 24-48 hours.",
-                reply_markup=reply_markup,
-                parse_mode="Markdown"
-            )
+            withdrawal_msg = f"💸 **Withdrawal Options**\n\n" \
+                           f"💰 Available Balance: ₹{balance:.2f}\n" \
+                           f"🎯 Minimum Withdrawal: ₹{min_withdrawal}\n\n" \
+                           f"Choose your preferred withdrawal method:\n\n" \
+                           f"⚠️ Withdrawals are processed within 24-48 hours."
+            
+            if hasattr(update, 'callback_query') and update.callback_query:
+                await update.callback_query.edit_message_text(withdrawal_msg, reply_markup=reply_markup, parse_mode="Markdown")
+            else:
+                await update.message.reply_text(withdrawal_msg, reply_markup=reply_markup, parse_mode="Markdown")
             
         except Exception as e:
             logger.error(f"Error showing withdrawal options: {e}")
             try:
-                await update.callback_query.edit_message_text("❌ Error loading withdrawal options.")
+                error_msg = "❌ Error loading withdrawal options."
+                if hasattr(update, 'callback_query') and update.callback_query:
+                    await update.callback_query.edit_message_text(error_msg)
+                else:
+                    await update.message.reply_text(error_msg, reply_markup=self.get_reply_keyboard())
             except:
                 pass
     
@@ -933,16 +1045,31 @@ Contact our admin team for assistance."""
             
             logger.info(f"Message from user {user_id}: {text[:50]}...")
             
-            # Default response
-            await update.message.reply_text(
-                "👋 Hi! Use the menu buttons or commands to navigate:\n\n"
-                "• /start - Main menu\n"
-                "• /wallet - Check your balance\n"
-                "• /campaigns - View available tasks\n"
-                "• /referral - Your referral program\n"
-                "• /help - Show help\n\n"
-                "💡 Use the buttons in messages for easier navigation!"
-            )
+            # Handle reply keyboard commands
+            if text == "💰 My Wallet":
+                await self.wallet_command(update, context)
+            elif text == "📋 Campaigns":
+                await self.campaigns_command(update, context)
+            elif text == "👥 Referral":
+                await self.referral_command(update, context)
+            elif text == "💸 Withdraw":
+                await self.show_withdrawal_options(update, context)
+            elif text == "🆘 Help":
+                await self.help_command(update, context)
+            elif text == "⚙️ Settings":
+                await self.show_user_settings(update, context)
+            else:
+                # Default response
+                await update.message.reply_text(
+                    "👋 Hi! Use the menu buttons below or commands:\n\n"
+                    "• /start - Main menu\n"
+                    "• /wallet - Check your balance\n"
+                    "• /campaigns - View available tasks\n"
+                    "• /referral - Your referral program\n"
+                    "• /help - Show help\n\n"
+                    "💡 Use the permanent menu buttons for easier navigation!",
+                    reply_markup=self.get_reply_keyboard()
+                )
         except Exception as e:
             logger.error(f"Error handling message: {e}")
 
@@ -1030,7 +1157,7 @@ async def root():
         }
     }
 
-# Admin Panel APIs
+# Admin Panel APIs (keeping existing for brevity)
 @app.get("/api/admin/dashboard")
 async def get_dashboard(admin: str = Depends(authenticate_admin)):
     """Get admin dashboard stats"""
