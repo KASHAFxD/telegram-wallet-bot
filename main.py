@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from motor.motor_asyncio import AsyncIOMotorClient
-from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, WebApp
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 import asyncio
 import os
