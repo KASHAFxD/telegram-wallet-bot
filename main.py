@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -15,14 +14,6 @@ from datetime import datetime, timedelta
 import logging
 import traceback
 import uuid
-# Define emoji constants at top of file
-EMOJI_CHECK = "\u2705"      # ✅
-EMOJI_CROSS = "\u274C"      # ❌  
-EMOJI_PENDING = "\u2B1C"    # ⬜
-EMOJI_WARNING = "\u26A0"    # ⚠️
-
-# Use in code
-status = f"Verification: {EMOJI_CHECK if verified else EMOJI_PENDING}"
 
 # Configure logging
 logging.basicConfig(
@@ -45,6 +36,25 @@ app = FastAPI(title="Enhanced Wallet Bot - Complete Security", version="3.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 security = HTTPBasic()
 
+# Emoji Constants (Safe Unicode)
+EMOJI = {
+    'check': '\u2705',      # ✅
+    'cross': '\u274C',      # ❌
+    'pending': '\u2B1C',    # ⬜
+    'warning': '\u26A0',    # ⚠️
+    'lock': '\U0001F512',   # 🔒
+    'rocket': '\U0001F680', # 🚀
+    'wallet': '\U0001F4B0', # 💰
+    'shield': '\U0001F6E1', # 🛡️
+    'fire': '\U0001F525',   # 🔥
+    'star': '\u2B50',       # ⭐
+    'gear': '\u2699',       # ⚙️
+    'chart': '\U0001F4CA',  # 📊
+    'bell': '\U0001F514',   # 🔔
+    'key': '\U0001F511',    # 🔑
+    'globe': '\U0001F30D'   # 🌍
+}
+
 # Global database
 db_client = None
 db_connected = False
@@ -62,13 +72,13 @@ async def init_database():
         )
         await db_client.admin.command('ping')
         db_connected = True
-        logger.info("✅ MongoDB Atlas connected successfully")
+        logger.info("Database connected successfully")
         
         # Create indexes for better performance
         await create_database_indexes()
         return True
     except Exception as e:
-        logger.error(f"❌ MongoDB connection failed: {e}")
+        logger.error(f"MongoDB connection failed: {e}")
         db_connected = False
         return False
 
@@ -83,18 +93,15 @@ async def create_database_indexes():
             
             # Device fingerprints collection indexes
             await db_client.walletbot.device_fingerprints.create_index("basic_fingerprint", unique=True)
-            await db_client.walletbot.device_fingerprints.create_index("advanced_fingerprint")
-            await db_client.walletbot.device_fingerprints.create_index("combined_fingerprint")
             await db_client.walletbot.device_fingerprints.create_index("user_id")
             
             # Security logs collection indexes
             await db_client.walletbot.security_logs.create_index("user_id")
             await db_client.walletbot.security_logs.create_index("event_type")
-            await db_client.walletbot.security_logs.create_index("timestamp")
             
-            logger.info("✅ Database indexes created successfully")
+            logger.info("Database indexes created successfully")
     except Exception as e:
-        logger.warning(f"⚠️ Index creation warning: {e}")
+        logger.warning(f"Index creation warning: {e}")
 
 # Enhanced User Model with Complete Security
 class UserModel:
@@ -116,15 +123,10 @@ class UserModel:
             return db_client.walletbot.security_logs
         return None
     
-    def get_transactions_collection(self):
-        if db_client is not None and db_connected:
-            return db_client.walletbot.transactions
-        return None
-    
     async def create_user(self, user_data: dict):
         collection = self.get_collection()
         if collection is None:
-            logger.warning("❌ Database not connected for user creation")
+            logger.warning("Database not connected for user creation")
             return None
             
         try:
@@ -134,8 +136,6 @@ class UserModel:
                 "total_earned": 0.0,
                 "referral_earnings": 0.0,
                 "total_referrals": 0,
-                "total_campaigns_completed": 0,
-                "total_withdrawals": 0.0,
                 "is_active": True,
                 "is_banned": False,
                 "device_verified": False,
@@ -154,15 +154,15 @@ class UserModel:
             )
             
             if result.upserted_id:
-                logger.info(f"✅ New user created: {user_data['user_id']}")
+                logger.info(f"New user created: {user_data['user_id']}")
                 await self.log_security_event(user_data["user_id"], "USER_CREATED", {"username": user_data.get("username")})
                 return True
             elif result.matched_count > 0:
-                logger.info(f"✅ Existing user found: {user_data['user_id']}")
+                logger.info(f"Existing user found: {user_data['user_id']}")
                 return True
             return False
         except Exception as e:
-            logger.error(f"❌ Error creating user: {e}")
+            logger.error(f"Error creating user: {e}")
             return False
     
     async def get_user(self, user_id: int):
@@ -179,7 +179,7 @@ class UserModel:
                 )
             return user
         except Exception as e:
-            logger.error(f"❌ Error getting user: {e}")
+            logger.error(f"Error getting user: {e}")
             return None
     
     async def is_user_verified(self, user_id: int):
@@ -208,38 +208,25 @@ class UserModel:
                 str(device_data.get('canvas_hash', '')),
                 str(device_data.get('webgl_hash', '')),
                 str(device_data.get('hardware_concurrency', '')),
-                str(device_data.get('memory', '')),
-                str(device_data.get('color_depth', '')),
-                str(device_data.get('pixel_ratio', ''))
+                str(device_data.get('memory', ''))
             ]
             advanced_fingerprint = hashlib.sha256('|'.join(advanced_components).encode()).hexdigest()
             
-            # Behavioral fingerprint (user interaction patterns)
-            behavioral_components = [
-                str(device_data.get('mouse_movement_hash', '')),
-                str(device_data.get('typing_rhythm_hash', '')),
-                str(device_data.get('scroll_behavior_hash', '')),
-                str(device_data.get('touch_pattern_hash', ''))
-            ]
-            behavioral_fingerprint = hashlib.sha256('|'.join(behavioral_components).encode()).hexdigest()
-            
-            # Combined fingerprint (all layers)
+            # Combined fingerprint
             combined_fingerprint = hashlib.sha256(
-                f"{basic_fingerprint}|{advanced_fingerprint}|{behavioral_fingerprint}".encode()
+                f"{basic_fingerprint}|{advanced_fingerprint}".encode()
             ).hexdigest()
             
             return {
                 'basic': basic_fingerprint,
                 'advanced': advanced_fingerprint,
-                'behavioral': behavioral_fingerprint,
                 'combined': combined_fingerprint
             }
         except Exception as e:
-            logger.error(f"❌ Fingerprint generation error: {e}")
+            logger.error(f"Fingerprint generation error: {e}")
             return {
                 'basic': hashlib.sha256(f"error_{datetime.utcnow().timestamp()}".encode()).hexdigest(),
                 'advanced': '',
-                'behavioral': '',
                 'combined': ''
             }
     
@@ -268,48 +255,10 @@ class UserModel:
                     "message": "यह device पहले से एक verified account के साथ registered है। Multiple accounts allowed नहीं हैं।"
                 }
             
-            # Check advanced fingerprint (hardware similarity)
-            advanced_conflict = await device_collection.find_one({
-                "advanced_fingerprint": fingerprints['advanced'],
-                "user_id": {"$ne": user_id}
-            })
-            
-            if advanced_conflict:
-                await self.log_security_event(user_id, "DEVICE_CONFLICT_ADVANCED", {
-                    "conflicting_user": advanced_conflict['user_id'],
-                    "fingerprint": fingerprints['advanced'][:16] + "..."
-                })
-                return {
-                    "conflict": True,
-                    "reason": "advanced_fingerprint_exists", 
-                    "conflicting_user": advanced_conflict['user_id'],
-                    "message": "Similar device hardware detected। Same device पर multiple accounts create नहीं कर सकते।"
-                }
-            
-            # Check for suspicious patterns (multiple attempts from similar fingerprints)
-            recent_attempts = await device_collection.count_documents({
-                "$or": [
-                    {"basic_fingerprint": {"$regex": fingerprints['basic'][:32]}},
-                    {"advanced_fingerprint": {"$regex": fingerprints['advanced'][:32]}}
-                ],
-                "created_at": {"$gte": datetime.utcnow() - timedelta(hours=24)},
-                "user_id": {"$ne": user_id}
-            })
-            
-            if recent_attempts > 2:
-                await self.log_security_event(user_id, "SUSPICIOUS_DEVICE_PATTERN", {
-                    "recent_attempts": recent_attempts
-                })
-                return {
-                    "conflict": True,
-                    "reason": "suspicious_pattern",
-                    "message": "Suspicious device pattern detected। 24 घंटे बाद try करें।"
-                }
-            
             return {"conflict": False, "reason": "no_conflict"}
             
         except Exception as e:
-            logger.error(f"❌ Device conflict check error: {e}")
+            logger.error(f"Device conflict check error: {e}")
             return {"conflict": True, "reason": "check_error", "message": "Technical error during verification"}
     
     async def verify_device(self, user_id: int, device_data: dict) -> dict:
@@ -335,12 +284,10 @@ class UserModel:
                 "user_id": user_id,
                 "basic_fingerprint": fingerprints['basic'],
                 "advanced_fingerprint": fingerprints['advanced'],
-                "behavioral_fingerprint": fingerprints['behavioral'],
                 "combined_fingerprint": fingerprints['combined'],
                 "device_data": device_data,
                 "created_at": datetime.utcnow(),
                 "last_verified": datetime.utcnow(),
-                "verification_attempts": 1,
                 "is_active": True
             }
             
@@ -352,7 +299,7 @@ class UserModel:
                 "device_fingerprint": fingerprints['basic'],
                 "verification_status": "verified",
                 "device_verified_at": datetime.utcnow(),
-                "risk_score": 0.1  # Low risk for successful verification
+                "risk_score": 0.1
             }
             
             result = await collection.update_one(
@@ -366,21 +313,19 @@ class UserModel:
                     "verification_method": "enhanced_fingerprinting"
                 })
                 
-                logger.info(f"✅ Device successfully verified for user {user_id}")
+                logger.info(f"Device successfully verified for user {user_id}")
                 return {"success": True, "message": "Device verified successfully"}
             else:
                 return {"success": False, "message": "User update failed"}
                 
         except Exception as e:
-            logger.error(f"❌ Device verification error: {e}")
+            logger.error(f"Device verification error: {e}")
             await self.log_security_event(user_id, "DEVICE_VERIFICATION_ERROR", {"error": str(e)})
             return {"success": False, "message": "Verification failed due to technical error"}
     
-    async def add_to_wallet(self, user_id: int, amount: float, transaction_type: str, description: str, metadata: dict = None):
-        """Add money to user wallet with transaction logging"""
+    async def add_to_wallet(self, user_id: int, amount: float, transaction_type: str, description: str):
+        """Add money to user wallet"""
         collection = self.get_collection()
-        transactions_collection = self.get_transactions_collection()
-        
         if collection is None:
             return False
         
@@ -406,10 +351,6 @@ class UserModel:
             if transaction_type == "referral":
                 wallet_update["referral_earnings"] = user.get("referral_earnings", 0) + amount
                 wallet_update["total_referrals"] = user.get("total_referrals", 0) + 1
-            elif transaction_type == "campaign":
-                wallet_update["total_campaigns_completed"] = user.get("total_campaigns_completed", 0) + 1
-            elif transaction_type == "withdrawal":
-                wallet_update["total_withdrawals"] = user.get("total_withdrawals", 0) + abs(amount)
             
             result = await collection.update_one(
                 {"user_id": user_id},
@@ -417,27 +358,12 @@ class UserModel:
             )
             
             if result.modified_count > 0:
-                # Log transaction
-                if transactions_collection is not None:
-                    transaction_record = {
-                        "user_id": user_id,
-                        "amount": amount,
-                        "type": transaction_type,
-                        "description": description,
-                        "balance_before": user.get("wallet_balance", 0),
-                        "balance_after": new_balance,
-                        "metadata": metadata or {},
-                        "created_at": datetime.utcnow(),
-                        "status": "completed"
-                    }
-                    await transactions_collection.insert_one(transaction_record)
-                
-                logger.info(f"✅ Wallet updated for user {user_id}: {amount:+.2f} ({transaction_type})")
+                logger.info(f"Wallet updated for user {user_id}: {amount:+.2f} ({transaction_type})")
                 return True
             
             return False
         except Exception as e:
-            logger.error(f"❌ Error adding to wallet: {e}")
+            logger.error(f"Error adding to wallet: {e}")
             return False
     
     async def log_security_event(self, user_id: int, event_type: str, details: dict):
@@ -451,12 +377,11 @@ class UserModel:
                 "user_id": user_id,
                 "event_type": event_type,
                 "details": details,
-                "timestamp": datetime.utcnow(),
-                "ip_address": details.get("ip_address", "unknown")
+                "timestamp": datetime.utcnow()
             }
             await security_logs.insert_one(log_entry)
         except Exception as e:
-            logger.error(f"❌ Security logging error: {e}")
+            logger.error(f"Security logging error: {e}")
     
     async def get_user_stats(self) -> dict:
         """Get comprehensive user statistics"""
@@ -499,14 +424,14 @@ class UserModel:
                 })
             
         except Exception as e:
-            logger.error(f"❌ Stats calculation error: {e}")
+            logger.error(f"Stats calculation error: {e}")
         
         return stats
 
 # Initialize user model
 user_model = UserModel()
 
-# Enhanced Telegram Bot with Complete Features
+# Enhanced Telegram Bot
 class WalletBot:
     def __init__(self):
         self.bot = None
@@ -520,9 +445,9 @@ class WalletBot:
             self.application = ApplicationBuilder().token(BOT_TOKEN).build()
             self.setup_handlers()
             self.initialized = True
-            logger.info("✅ Enhanced Telegram bot initialized")
+            logger.info("Enhanced Telegram bot initialized")
         except Exception as e:
-            logger.error(f"❌ Bot initialization error: {e}")
+            logger.error(f"Bot initialization error: {e}")
             self.initialized = False
     
     def setup_handlers(self):
@@ -531,13 +456,11 @@ class WalletBot:
             self.application.add_handler(CommandHandler("start", self.start_command))
             self.application.add_handler(CommandHandler("wallet", self.wallet_command))
             self.application.add_handler(CommandHandler("help", self.help_command))
-            self.application.add_handler(CommandHandler("status", self.status_command))
             self.application.add_handler(CommandHandler("referral", self.referral_command))
             self.application.add_handler(CommandHandler("device_verified", self.device_verified_callback))
             
             # Admin commands
             self.application.add_handler(CommandHandler("admin", self.admin_command))
-            self.application.add_handler(CommandHandler("stats", self.admin_stats_command))
             
             # Callback handlers
             self.application.add_handler(CallbackQueryHandler(self.button_handler))
@@ -548,20 +471,19 @@ class WalletBot:
             # Error handler
             self.application.add_error_handler(self.error_handler)
             
-            logger.info("✅ All bot handlers setup complete")
+            logger.info("All bot handlers setup complete")
         except Exception as e:
-            logger.error(f"❌ Handler setup error: {e}")
+            logger.error(f"Handler setup error: {e}")
     
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Enhanced error handler with logging"""
         logger.error("Exception while handling an update:", exc_info=context.error)
         
-        # Try to send error message to user
         try:
             if update and hasattr(update, 'effective_user'):
                 await context.bot.send_message(
                     update.effective_user.id,
-                    "❌ An error occurred. Please try again or contact support.",
+                    f"{EMOJI['cross']} An error occurred. Please try again.",
                     reply_markup=self.get_reply_keyboard()
                 )
         except:
@@ -570,9 +492,9 @@ class WalletBot:
     def get_reply_keyboard(self):
         """Get main reply keyboard"""
         keyboard = [
-            [KeyboardButton("💰 My Wallet"), KeyboardButton("📋 Campaigns")],
-            [KeyboardButton("👥 Referral"), KeyboardButton("💸 Withdraw")],
-            [KeyboardButton("🆘 Help"), KeyboardButton("📊 Status")]
+            [KeyboardButton(f"{EMOJI['wallet']} My Wallet"), KeyboardButton(f"{EMOJI['chart']} Campaigns")],
+            [KeyboardButton(f"{EMOJI['star']} Referral"), KeyboardButton(f"{EMOJI['gear']} Withdraw")],
+            [KeyboardButton(f"{EMOJI['bell']} Help"), KeyboardButton(f"{EMOJI['shield']} Status")]
         ]
         return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
@@ -582,7 +504,7 @@ class WalletBot:
             username = update.effective_user.username or "Unknown"
             first_name = update.effective_user.first_name or "User"
             
-            logger.info(f"🚀 Start command from user: {user_id} ({first_name})")
+            logger.info(f"Start command from user: {user_id} ({first_name})")
             
             # Handle referral codes
             referrer_id = None
@@ -590,7 +512,7 @@ class WalletBot:
             if args and args[0].startswith('ref_'):
                 try:
                     referrer_id = int(args[0].replace('ref_', ''))
-                    logger.info(f"🔗 Referral detected: {referrer_id} -> {user_id}")
+                    logger.info(f"Referral detected: {referrer_id} -> {user_id}")
                 except ValueError:
                     pass
             
@@ -618,38 +540,32 @@ class WalletBot:
                     await self.process_referral_bonus(user_id, referrer_id)
                     
         except Exception as e:
-            logger.error(f"❌ Start command error: {e}")
-            await update.message.reply_text("❌ Error occurred. Please try again.")
+            logger.error(f"Start command error: {e}")
+            await update.message.reply_text(f"{EMOJI['cross']} Error occurred. Please try again.")
     
     async def require_device_verification(self, user_id: int, first_name: str, update: Update):
         """Send device verification requirement"""
         verification_url = f"{RENDER_EXTERNAL_URL}/verify?user_id={user_id}"
         
-        verification_msg = f"""🔒 **Enhanced Security Verification**
+        verification_msg = f"""{EMOJI['lock']} **Enhanced Security Verification**
 
 Welcome {first_name}! 
 
 **One Device, One Account Policy:**
-• Advanced device fingerprinting enabled
-• Multiple account creation prevented
-• Enhanced fraud protection active
-
-**Verification Process:**
-• Collect device characteristics
-• Generate unique fingerprint
-• Check against existing accounts
-• Allow only first account per device
+{EMOJI['shield']} Advanced device fingerprinting enabled
+{EMOJI['cross']} Multiple account creation prevented
+{EMOJI['fire']} Enhanced fraud protection active
 
 **Security Benefits:**
-• Account protection guaranteed
-• Fair usage for all users  
-• Premium anti-fraud system
-• Secure wallet operations
+{EMOJI['check']} Account protection guaranteed
+{EMOJI['star']} Fair usage for all users  
+{EMOJI['gear']} Premium anti-fraud system
+{EMOJI['wallet']} Secure wallet operations
 
 Click below to verify your device:"""
         
         keyboard = [
-            [InlineKeyboardButton("🔐 Verify My Device", web_app=WebAppInfo(url=verification_url))]
+            [InlineKeyboardButton(f"{EMOJI['lock']} Verify My Device", web_app=WebAppInfo(url=verification_url))]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -657,33 +573,33 @@ Click below to verify your device:"""
     
     async def send_verified_welcome(self, update: Update, first_name: str):
         """Send welcome message for verified users"""
-        welcome_msg = f"""🎉 **Welcome to Enhanced Wallet Bot!**
+        welcome_msg = f"""{EMOJI['rocket']} **Welcome to Enhanced Wallet Bot!**
 
-Hi {first_name}! Your device is verified ✅
+Hi {first_name}! Your device is verified {EMOJI['check']}
 
 **Available Features:**
-💰 **Secure Wallet Management**
-📋 **Campaign Participation** (Coming Soon)
-👥 **Referral System** - Earn ₹10 per friend
-💸 **Withdrawal System** (Coming Soon)
-🛡️ **Advanced Security Protection**
+{EMOJI['wallet']} **Secure Wallet Management**
+{EMOJI['chart']} **Campaign Participation** (Coming Soon)
+{EMOJI['star']} **Referral System** - Earn Rs.10 per friend
+{EMOJI['gear']} **Withdrawal System** (Coming Soon)
+{EMOJI['shield']} **Advanced Security Protection**
 
 **Your Account Status:**
-🔒 Device Verified & Secure
-📱 Full Access Granted
-⚡ All Features Unlocked
+{EMOJI['lock']} Device Verified & Secure
+{EMOJI['fire']} Full Access Granted
+{EMOJI['rocket']} All Features Unlocked
 
 Choose an option below to get started:"""
         
-        inline_keyboard = [
-            [InlineKeyboardButton("💰 My Wallet", callback_data="wallet")],
-            [InlineKeyboardButton("👥 Referral", callback_data="referral")],
-            [InlineKeyboardButton("📊 Account Status", callback_data="status")]
+        keyboard = [
+            [InlineKeyboardButton(f"{EMOJI['wallet']} My Wallet", callback_data="wallet")],
+            [InlineKeyboardButton(f"{EMOJI['star']} Referral", callback_data="referral")],
+            [InlineKeyboardButton(f"{EMOJI['shield']} Status", callback_data="status")]
         ]
-        inline_reply_markup = InlineKeyboardMarkup(inline_keyboard)
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(welcome_msg, reply_markup=inline_reply_markup, parse_mode="Markdown")
-        await update.message.reply_text("🎯 **Quick Access Menu:**", reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
+        await update.message.reply_text(welcome_msg, reply_markup=reply_markup, parse_mode="Markdown")
+        await update.message.reply_text(f"{EMOJI['rocket']} **Quick Access Menu:**", reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
     
     async def device_verified_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle successful device verification"""
@@ -691,7 +607,7 @@ Choose an option below to get started:"""
         first_name = update.effective_user.first_name or "User"
         
         await update.message.reply_text(
-            "✅ **Device Verified Successfully!**\n\nYour account is now fully secured with advanced fingerprinting technology!\n\n🎉 All features are now unlocked!",
+            f"{EMOJI['check']} **Device Verified Successfully!**\n\nYour account is now fully secured with advanced fingerprinting technology!\n\n{EMOJI['rocket']} All features are now unlocked!",
             parse_mode='Markdown'
         )
         
@@ -717,8 +633,7 @@ Choose an option below to get started:"""
                 user_id, 
                 referral_bonus, 
                 "referral", 
-                f"Welcome bonus via referral from user {referrer_id}",
-                {"referrer_id": referrer_id, "bonus_type": "welcome"}
+                f"Welcome bonus via referral from user {referrer_id}"
             )
             
             # Add bonus to referrer
@@ -726,8 +641,7 @@ Choose an option below to get started:"""
                 referrer_id,
                 referral_bonus,
                 "referral",
-                f"Referral bonus from new user {user_id}",
-                {"referred_user_id": user_id, "bonus_type": "referrer"}
+                f"Referral bonus from new user {user_id}"
             )
             
             # Mark referral bonus as claimed
@@ -741,147 +655,324 @@ Choose an option below to get started:"""
             # Send notifications
             await self.bot.send_message(
                 user_id,
-                f"🎉 **Referral Bonus Received!**\n\nYou got ₹{referral_bonus:.2f} for joining via referral link!",
+                f"{EMOJI['rocket']} **Referral Bonus Received!**\n\nYou got Rs.{referral_bonus:.2f} for joining via referral link!",
                 parse_mode="Markdown"
             )
             
             await self.bot.send_message(
                 referrer_id,
-                f"🎉 **Referral Success!**\n\nSomeone used your referral link! You earned ₹{referral_bonus:.2f} bonus!",
+                f"{EMOJI['rocket']} **Referral Success!**\n\nSomeone used your referral link! You earned Rs.{referral_bonus:.2f} bonus!",
                 parse_mode="Markdown"
             )
             
-            logger.info(f"✅ Referral bonus processed: {referrer_id} -> {user_id}")
+            logger.info(f"Referral bonus processed: {referrer_id} -> {user_id}")
+            
+        except Exception as e:
+            logger.error(f"Referral bonus processing error: {e}")
+    
+    async def wallet_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Enhanced wallet command"""
+        user_id = update.effective_user.id
+        
+        # Check verification
+        if not await user_model.is_user_verified(user_id):
+            await update.message.reply_text(f"{EMOJI['lock']} Device verification required. Please /start to verify your device.")
+            return
+        
+        user = await user_model.get_user(user_id)
+        if not user:
+            await update.message.reply_text(f"{EMOJI['cross']} User not found.")
+            return
+        
+        wallet_msg = f"""{EMOJI['wallet']} **Your Secure Wallet**
 
+{EMOJI['star']} **User:** {user.get('first_name', 'Unknown')}
+{EMOJI['key']} **User ID:** `{user_id}`
+{EMOJI['wallet']} **Current Balance:** Rs.{user.get('wallet_balance', 0):.2f}
+
+**{EMOJI['chart']} Earnings Breakdown:**
+• Total Earned: Rs.{user.get('total_earned', 0):.2f}
+• Referral Earnings: Rs.{user.get('referral_earnings', 0):.2f}
+
+**{EMOJI['fire']} Activity Stats:**
+• Total Referrals: {user.get('total_referrals', 0)}
+• Member Since: {user.get('created_at', datetime.utcnow()).strftime('%Y-%m-%d')}
+
+**{EMOJI['lock']} Security Status:**
+• Device: {EMOJI['check']} Verified & Secure
+• Account: {EMOJI['check']} Active
+• Risk Level: {EMOJI['check']} Low
+
+**{EMOJI['chart']} Quick Actions:**"""
         
         keyboard = [
-            [InlineKeyboardButton("📤 Share Link", url=f"https://t.me/share/url?url={referral_link}")],
-            [InlineKeyboardButton("📋 View Tips", callback_data="referral_tips")],
-            [InlineKeyboardButton("🔄 Refresh Stats", callback_data="referral")]
+            [InlineKeyboardButton(f"{EMOJI['gear']} Withdraw", callback_data="withdraw"),
+             InlineKeyboardButton(f"{EMOJI['chart']} Campaigns", callback_data="campaigns")],
+            [InlineKeyboardButton(f"{EMOJI['star']} Referral", callback_data="referral"),
+             InlineKeyboardButton(f"{EMOJI['rocket']} Refresh", callback_data="wallet")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.callback_query.edit_message_text(referral_details, reply_markup=reply_markup, parse_mode="Markdown")
+        if hasattr(update, 'callback_query') and update.callback_query:
+            await update.callback_query.edit_message_text(wallet_msg, reply_markup=reply_markup, parse_mode="Markdown")
+        else:
+            await update.message.reply_text(wallet_msg, reply_markup=reply_markup, parse_mode="Markdown")
     
-    async def show_user_analytics(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Show detailed user analytics"""
+    async def referral_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Enhanced referral command"""
+        user_id = update.effective_user.id
+        
+        if not await user_model.is_user_verified(user_id):
+            await update.message.reply_text(f"{EMOJI['lock']} Device verification required for referral system.")
+            return
+        
+        user = await user_model.get_user(user_id)
+        if not user:
+            return
+        
+        bot_username = (await self.bot.get_me()).username
+        referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+        
+        referral_msg = f"""{EMOJI['star']} **Enhanced Referral Program**
+
+**{EMOJI['rocket']} Earn Rs.10 for each verified friend!**
+
+**Your Referral Stats:**
+• Total Referrals: {user.get('total_referrals', 0)}
+• Referral Earnings: Rs.{user.get('referral_earnings', 0):.2f}
+
+**{EMOJI['key']} Your Personal Referral Link:**
+`{referral_link}`
+
+**{EMOJI['fire']} How it Works:**
+1. Share your unique referral link
+2. Friends join and verify their device
+3. Both of you get Rs.10 instantly!
+4. No limit on referrals - earn unlimited!
+
+**{EMOJI['shield']} Security Features:**
+• Only device-verified users get rewards
+• Advanced fraud prevention active
+• Fair system for genuine referrals"""
+        
+        keyboard = [
+            [InlineKeyboardButton(f"{EMOJI['rocket']} Share Link", url=f"https://t.me/share/url?url={referral_link}")],
+            [InlineKeyboardButton(f"{EMOJI['chart']} My Stats", callback_data="referral_stats")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(referral_msg, reply_markup=reply_markup, parse_mode="Markdown")
+    
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Enhanced help command"""
+        help_msg = f"""{EMOJI['bell']} **Enhanced Bot Help & Guide**
+
+**{EMOJI['gear']} Available Commands:**
+• /start - Main menu with device verification
+• /wallet - Detailed wallet information  
+• /referral - Complete referral program
+• /help - Show this help
+
+**{EMOJI['lock']} Security Features:**
+• Advanced device fingerprinting
+• One device = One account policy
+• Real-time fraud detection
+
+**{EMOJI['wallet']} Earning Opportunities:**
+• **Referral System:** Rs.10 per verified friend
+• **Campaigns:** Task-based earning (coming soon)
+
+**{EMOJI['shield']} Account Security:**
+• Device verification mandatory
+• Regular security checks
+• Activity monitoring
+
+**{EMOJI['bell']} Need More Help?**
+Contact our support team for assistance."""
+        
+        await update.message.reply_text(help_msg, reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
+    
+    async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Admin command for authorized users"""
+        user_id = update.effective_user.id
+        
+        if user_id != ADMIN_CHAT_ID:
+            await update.message.reply_text(f"{EMOJI['cross']} Unauthorized access.")
+            return
+        
+        stats = await user_model.get_user_stats()
+        
+        admin_msg = f"""{EMOJI['gear']} **Admin Control Panel**
+
+**{EMOJI['chart']} System Statistics:**
+• Total Users: {stats['total_users']}
+• Verified Users: {stats['verified_users']}
+• Pending Verification: {stats['pending_verification']}
+• Unique Devices: {stats['total_devices']}
+• New Users (24h): {stats['recent_registrations']}
+
+**{EMOJI['shield']} Security Metrics:**
+• Security Events (24h): {stats['security_events_24h']}
+• Verification Rate: {(stats['verified_users']/max(stats['total_users'], 1)*100):.1f}%
+
+**{EMOJI['check']} System Status:** All systems operational"""
+        
+        await update.message.reply_text(admin_msg, parse_mode="Markdown")
+    
+    async def button_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Enhanced button handler"""
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = update.effective_user.id
+        data = query.data
+        
+        # Check verification for most actions
+        if data != "admin_stats" and not await user_model.is_user_verified(user_id):
+            await query.edit_message_text(f"{EMOJI['lock']} Device verification required. Please /start to verify your device first.")
+            return
+        
+        if data == "wallet":
+            await self.wallet_command(update, context)
+        elif data == "campaigns":
+            campaigns_msg = f"""{EMOJI['chart']} **Campaign System** (Coming Soon)
+
+**{EMOJI['rocket']} Features in Development:**
+• Task-based earning opportunities
+• Screenshot verification system
+• Instant reward processing
+
+**{EMOJI['wallet']} Expected Earnings:**
+• Basic Tasks: Rs.5-15 each
+• Advanced Campaigns: Rs.25-50 each
+
+Stay tuned for launch!"""
+            
+            await query.edit_message_text(campaigns_msg, parse_mode="Markdown")
+        elif data == "referral":
+            await self.show_referral_details(update, context)
+        elif data == "withdraw":
+            withdraw_msg = f"""{EMOJI['gear']} **Withdrawal System** (Coming Soon)
+
+**{EMOJI['wallet']} Payment Methods:**
+• Bank Transfer (NEFT/IMPS)
+• UPI Payments
+• Digital Wallets
+
+**{EMOJI['gear']} Settings:**
+• Minimum: Rs.6.00
+• Processing: 2-24 hours
+
+Coming soon with enhanced security!"""
+            
+            await query.edit_message_text(withdraw_msg, parse_mode="Markdown")
+        else:
+            await query.answer(f"{EMOJI['warning']} Unknown action.")
+    
+    async def show_referral_details(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show detailed referral information"""
         user_id = update.effective_user.id
         user = await user_model.get_user(user_id)
         
         if not user:
             return
         
-        # Calculate analytics data
-        account_age = (datetime.utcnow() - user.get('created_at', datetime.utcnow())).days
-        total_earnings = user.get('total_earned', 0)
-        referral_rate = user.get('total_referrals', 0)
+        bot_username = (await self.bot.get_me()).username
+        referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
         
-        analytics_msg = f"""📊 **Your Account Analytics**
+        referral_details = f"""{EMOJI['star']} **Your Referral Dashboard**
 
-**📈 Performance Overview:**
-• Account Age: {account_age} days
-• Total Earnings: ₹{total_earnings:.2f}
-• Daily Average: ₹{(total_earnings / max(account_age, 1)):.2f}
-• Growth Trend: 📈 Positive
+**{EMOJI['chart']} Current Performance:**
+• Active Referrals: {user.get('total_referrals', 0)}
+• Total Earnings: Rs.{user.get('referral_earnings', 0):.2f}
+• Success Rate: 100% (All verified users)
 
-**💰 Earnings Breakdown:**
-• Referral Income: ₹{user.get('referral_earnings', 0):.2f} ({(user.get('referral_earnings', 0) / max(total_earnings, 1) * 100):.1f}%)
-• Campaign Income: ₹{(total_earnings - user.get('referral_earnings', 0)):.2f}
-• Bonus Income: ₹0.00
+**{EMOJI['key']} Your Unique Link:**
+`{referral_link}`
 
-**👥 Referral Performance:**
-• Total Referrals: {referral_rate}
-• Referral Success Rate: 100%
-• Average Earnings per Referral: ₹10.00
-• Referral Growth: Steady
+**{EMOJI['rocket']} Earning Potential:**
+• 10 Referrals = Rs.100
+• 50 Referrals = Rs.500  
+• 100 Referrals = Rs.1,000
 
-**📱 Activity Metrics:**
-• Commands Used: High Activity
-• Feature Usage: Comprehensive
-• Login Frequency: Regular User
-• Engagement Level: 🔥 Excellent
-
-**🏆 Achievement Status:**
-• Verified User: ✅ Achieved
-• First Referral: {"✅" if referral_rate > 0 else "🔳"} {"Achieved" if referral_rate > 0 else "Not Yet"}
-• Power User: {"✅" if total_earnings >= 100 else "🔳"} {"Achieved" if total_earnings >= 100 else f"₹{100-total_earnings:.2f} to go"}
-• Top Referrer: {"✅" if referral_rate >= 50 else "🔳"} {"Achieved" if referral_rate >= 50 else f"{50-referral_rate} more needed"}
-
-**📅 Account Timeline:**
-• Registration: {user.get('created_at', datetime.utcnow()).strftime('%Y-%m-%d')}
-• Verification: {user.get('device_verified_at', datetime.utcnow()).strftime('%Y-%m-%d')}
-• Last Activity: {user.get('last_activity', datetime.utcnow()).strftime('%Y-%m-%d %H:%M')}"""
+**{EMOJI['fire']} Achievements:**
+• First Referral: {EMOJI['check'] if user.get('total_referrals', 0) > 0 else EMOJI['pending']}
+• Power User: {EMOJI['check'] if user.get('total_referrals', 0) >= 10 else EMOJI['pending']}"""
         
-        await update.callback_query.edit_message_text(analytics_msg, parse_mode="Markdown")
+        keyboard = [
+            [InlineKeyboardButton(f"{EMOJI['rocket']} Share Link", url=f"https://t.me/share/url?url={referral_link}")],
+            [InlineKeyboardButton(f"{EMOJI['chart']} Refresh", callback_data="referral")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.callback_query.edit_message_text(referral_details, reply_markup=reply_markup, parse_mode="Markdown")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Enhanced message handler"""
         text = update.message.text
         user_id = update.effective_user.id
         
-        logger.info(f"💬 Message from user {user_id}: {text[:50]}...")
-        
         # Check verification for feature access
         verification_required_texts = [
-            "💰 My Wallet", "📋 Campaigns", "👥 Referral", "💸 Withdraw"
+            f"{EMOJI['wallet']} My Wallet", f"{EMOJI['chart']} Campaigns", 
+            f"{EMOJI['star']} Referral", f"{EMOJI['gear']} Withdraw"
         ]
         
         if text in verification_required_texts:
             if not await user_model.is_user_verified(user_id):
                 await update.message.reply_text(
-                    "🔒 Device verification required for this feature. Please /start to verify your device.",
+                    f"{EMOJI['lock']} Device verification required for this feature. Please /start to verify your device.",
                     reply_markup=self.get_reply_keyboard()
                 )
                 return
         
         # Handle menu button messages
-        if text == "💰 My Wallet":
+        if text == f"{EMOJI['wallet']} My Wallet":
             await self.wallet_command(update, context)
-        elif text == "📋 Campaigns":
-            campaigns_msg = """📋 **Campaign System Coming Soon!**
-
-🚀 Get ready for exciting earning opportunities through verified tasks and challenges!
-
-Features being developed:
-• Screenshot verification
-• Task categories
-• Instant rewards
-• Performance tracking"""
-            await update.message.reply_text(campaigns_msg, reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
-        elif text == "👥 Referral":
+        elif text == f"{EMOJI['chart']} Campaigns":
+            await update.message.reply_text(f"{EMOJI['chart']} **Campaigns coming soon!**", reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
+        elif text == f"{EMOJI['star']} Referral":
             await self.referral_command(update, context)
-        elif text == "💸 Withdraw":
-            withdraw_msg = """💸 **Withdrawal System Coming Soon!**
-
-🏦 Multiple payment methods in development:
-• Bank transfers
-• UPI payments  
-• Digital wallets
-• Secure processing"""
-            await update.message.reply_text(withdraw_msg, reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
-        elif text == "🆘 Help":
+        elif text == f"{EMOJI['gear']} Withdraw":
+            await update.message.reply_text(f"{EMOJI['gear']} **Withdrawals coming soon!**", reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
+        elif text == f"{EMOJI['bell']} Help":
             await self.help_command(update, context)
-        elif text == "📊 Status":
-            await self.status_command(update, context)
+        elif text == f"{EMOJI['shield']} Status":
+            await self.show_status(update, context)
         else:
-            # Default response with helpful information
-            welcome_msg = f"""👋 **Hi there!**
+            welcome_msg = f"""{EMOJI['star']} **Hi there!**
 
-🤖 **Enhanced Wallet Bot** with advanced security
-🔒 **Device fingerprinting** protection active
-💰 **Earning opportunities** available
-
-**Quick Access:**
-Use the menu buttons below for easy navigation to all features.
+{EMOJI['rocket']} **Enhanced Wallet Bot** with advanced security
+{EMOJI['lock']} **Device fingerprinting** protection active
+{EMOJI['wallet']} **Earning opportunities** available
 
 **Current Status:**
-• {'✅ Device Verified' if await user_model.is_user_verified(user_id) else '⚠️ Verification Pending'}
-• 🔋 All systems operational
-• ⚡ Instant responses enabled
+• {EMOJI['check'] if await user_model.is_user_verified(user_id) else EMOJI['warning']} {'Device Verified' if await user_model.is_user_verified(user_id) else 'Verification Pending'}
 
-**Need Help?** Use the 🆘 Help button for comprehensive guide."""
+Use the menu buttons below for navigation."""
             
             await update.message.reply_text(welcome_msg, reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
+    
+    async def show_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show system status"""
+        user_id = update.effective_user.id
+        user = await user_model.get_user(user_id)
+        
+        status_msg = f"""{EMOJI['shield']} **System Status**
+
+**{EMOJI['gear']} System:**
+• Status: {EMOJI['check']} Running
+• Database: {EMOJI['check'] if db_connected else EMOJI['cross']} {'Connected' if db_connected else 'Disconnected'}
+
+**{EMOJI['star']} Your Account:**
+• Verification: {EMOJI['check'] if await user_model.is_user_verified(user_id) else EMOJI['warning']} {'Verified' if await user_model.is_user_verified(user_id) else 'Pending'}
+• Member Since: {user.get('created_at', datetime.utcnow()).strftime('%Y-%m-%d') if user else 'Today'}
+
+**{EMOJI['lock']} Security:**
+• Device fingerprinting: {EMOJI['check']} Active
+• Fraud prevention: {EMOJI['check']} Enabled"""
+        
+        await update.message.reply_text(status_msg, reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
 
 # Initialize bot
 wallet_bot = None
@@ -889,533 +980,161 @@ wallet_bot = None
 # Enhanced Device Verification API
 @app.post("/api/verify-device")
 async def verify_device(request: Request):
-    """Complete device verification with enhanced security"""
+    """Complete device verification API"""
     try:
         data = await request.json()
         user_id = int(data.get('user_id'))
         device_data = data.get('device_data', {})
         
-        logger.info(f"🔍 Device verification request from user {user_id}")
+        logger.info(f"Device verification request from user {user_id}")
         
         # Enhanced device verification
         verification_result = await user_model.verify_device(user_id, device_data)
         
         if verification_result["success"]:
-            # Send success callback to bot
             try:
                 await wallet_bot.bot.send_message(user_id, "/device_verified")
-                logger.info(f"✅ Device verification successful for user {user_id}")
+                logger.info(f"Device verification successful for user {user_id}")
             except Exception as bot_error:
-                logger.error(f"❌ Bot callback error: {bot_error}")
+                logger.error(f"Bot callback error: {bot_error}")
         else:
-            logger.warning(f"❌ Device verification failed for user {user_id}: {verification_result['message']}")
+            logger.warning(f"Device verification failed for user {user_id}: {verification_result['message']}")
             
         return verification_result
             
     except Exception as e:
-        logger.error(f"❌ Device verification API error: {e}")
+        logger.error(f"Device verification API error: {e}")
         return {"success": False, "message": "Technical error during verification"}
 
-# Enhanced Device Verification WebApp
+# Enhanced Device Verification WebApp (FIXED)
 @app.get("/verify")
 async def verification_page(user_id: int):
-    """Complete device verification page with advanced fingerprinting"""
+    """Complete device verification page"""
     html_content = f"""
-
-
-
-    
-    
-    Enhanced Device Security Verification
-    
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Verification</title>
+    <style>
         body {{ 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            min-height: 100vh; 
+            margin: 0; 
         }}
-        .container {{
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            max-width: 450px;
-            width: 100%;
-            text-align: center;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-            border: 2px solid rgba(255,255,255,0.3);
+        .container {{ 
+            max-width: 400px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
+            text-align: center; 
         }}
-        .icon {{ 
-            font-size: 4rem; 
-            margin-bottom: 20px;
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .icon {{ font-size: 3rem; margin-bottom: 15px; }}
+        h2 {{ color: #333; margin-bottom: 10px; }}
+        p {{ color: #666; margin-bottom: 20px; line-height: 1.5; }}
+        .btn {{ 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: white; 
+            padding: 12px 25px; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 16px; 
         }}
-        h1 {{ 
-            color: #333; 
-            margin-bottom: 15px; 
-            font-size: 1.8rem;
-            font-weight: 700;
-        }}
-        p {{ 
-            color: #666; 
-            margin-bottom: 25px; 
-            line-height: 1.6;
-            font-size: 1rem;
-        }}
-        .security-info {{
-            background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%);
-            padding: 25px;
-            border-radius: 15px;
-            margin: 25px 0;
-            text-align: left;
-            border: 1px solid rgba(102, 126, 234, 0.1);
-        }}
-        .security-info h3 {{ 
-            color: #333; 
-            margin-bottom: 15px;
-            font-size: 1.2rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }}
-        .security-info ul {{ 
-            padding-left: 0;
-            list-style: none;
-        }}
-        .security-info li {{ 
-            margin: 10px 0; 
-            color: #555;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }}
-        .security-info li:last-child {{
-            border-bottom: none;
-        }}
-        .btn {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 18px 35px;
-            border-radius: 15px;
-            font-size: 1.1rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }}
-        .btn:hover {{ 
-            transform: translateY(-3px);
-            box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
-        }}
-        .btn:disabled {{ 
-            opacity: 0.6; 
-            cursor: not-allowed; 
-            transform: none;
-            box-shadow: none;
-        }}
+        .btn:disabled {{ opacity: 0.6; cursor: not-allowed; }}
         .status {{ 
             margin: 20px 0; 
-            padding: 15px; 
-            border-radius: 12px; 
-            font-weight: 600;
-            font-size: 1rem;
+            padding: 12px; 
+            border-radius: 8px; 
+            font-weight: bold; 
         }}
-        .loading {{ 
-            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); 
-            color: #1565c0;
-            border: 1px solid rgba(21, 101, 192, 0.2);
-        }}
-        .success {{ 
-            background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); 
-            color: #2e7d32;
-            border: 1px solid rgba(46, 125, 50, 0.2);
-        }}
-        .error {{ 
-            background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); 
-            color: #c62828;
-            border: 1px solid rgba(198, 40, 40, 0.2);
-        }}
+        .loading {{ background: #e3f2fd; color: #1976d2; }}
+        .success {{ background: #e8f5e8; color: #2e7d32; }}
+        .error {{ background: #ffebee; color: #c62828; }}
         .progress {{ 
             width: 100%; 
-            height: 8px; 
-            background: #f0f0f0; 
-            border-radius: 10px; 
+            height: 4px; 
+            background: #eee; 
+            border-radius: 2px; 
             overflow: hidden; 
-            margin: 20px 0;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+            margin: 15px 0; 
         }}
         .progress-bar {{ 
             height: 100%; 
             background: linear-gradient(90deg, #667eea, #764ba2); 
             width: 0%; 
-            transition: width 0.4s ease;
-            border-radius: 10px;
+            transition: width 0.3s; 
         }}
-        .fingerprint-details {{
+        .security-info {{
             background: #f8f9fa;
             padding: 20px;
-            border-radius: 12px;
+            border-radius: 10px;
             margin: 20px 0;
             text-align: left;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9rem;
-            max-height: 150px;
-            overflow-y: auto;
-            border: 1px solid #e9ecef;
-            display: none;
         }}
-        .verification-steps {{
-            text-align: left;
-            margin: 20px 0;
-        }}
-        .verification-steps h4 {{
-            color: #333;
-            margin-bottom: 10px;
-        }}
-        .verification-steps ol {{
-            padding-left: 20px;
-        }}
-        .verification-steps li {{
-            margin: 8px 0;
-            color: #555;
-        }}
-        @keyframes pulse {{
-            0% {{ opacity: 1; }}
-            50% {{ opacity: 0.5; }}
-            100% {{ opacity: 1; }}
-        }}
-        .loading .icon {{
-            animation: pulse 2s infinite;
-        }}
-    
+        .security-info h3 {{ color: #333; margin-bottom: 10px; }}
+        .security-info ul {{ padding-left: 20px; }}
+        .security-info li {{ margin: 5px 0; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🔐</div>
+        <h2>Enhanced Device Verification</h2>
+        <p>Secure your account with advanced device fingerprinting</p>
+        
+        <div class="security-info">
+            <h3>🛡️ Security Features</h3>
+            <ul>
+                <li>✅ Advanced device fingerprinting</li>
+                <li>🔒 One device per account policy</li>
+                <li>🚫 Multiple account prevention</li>
+                <li>⚡ Real-time verification</li>
+            </ul>
+        </div>
+        
+        <div class="progress">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        
+        <div id="status" class="status loading">Ready to verify...</div>
+        
+        <button id="verifyBtn" class="btn" onclick="verifyDevice()">🔍 Verify Device</button>
+    </div>
 
-
-    
-        🔐
-        Enhanced Device Security Verification
-        Advanced multi-layer device fingerprinting with one-device-one-account enforcement.
-        
-        
-            🛡️ Security Protection Layers
-            
-                ✅ Advanced device fingerprinting technology
-                🔒 Hardware-level identification system
-                🚫 Multiple account prevention mechanism
-                ⚡ Real-time fraud detection engine
-                🎯 Behavioral pattern analysis
-                🔍 Cross-device correlation checks
-            
-        
-        
-        
-            📋 Verification Process:
-            
-                Collect comprehensive device characteristics
-                Generate multi-layer security fingerprints
-                Verify against existing device database
-                Apply one-device-one-account policy
-                Activate account with full security
-            
-        
-        
-        
-            
-        
-        
-        
-            🔄 Initializing enhanced verification system...
-        
-        
-        
-        
-        
-            🔍 Start Verification Process
-        
-    
-
-    
+    <script>
         const USER_ID = {user_id};
         let deviceData = {{}};
-        let verificationStarted = false;
         
-        // Enhanced Device Data Collection Class
-        class EnhancedDeviceCollector {{
-            constructor() {{
-                this.data = {{}};
-            }}
-            
-            async collectComprehensiveData() {{
-                try {{
-                    // Basic device information
-                    this.data.screen_resolution = `${{screen.width}}x${{screen.height}}x${{screen.colorDepth}}`;
-                    this.data.available_resolution = `${{screen.availWidth}}x${{screen.availHeight}}`;
-                    this.data.user_agent_hash = this.hashString(navigator.userAgent);
-                    this.data.timezone_offset = new Date().getTimezoneOffset();
-                    this.data.language = navigator.language || 'unknown';
-                    this.data.platform = navigator.platform || 'unknown';
-                    this.data.hardware_concurrency = navigator.hardwareConcurrency || 0;
-                    this.data.memory = navigator.deviceMemory || 0;
-                    this.data.pixel_ratio = window.devicePixelRatio || 1;
-                    this.data.color_depth = screen.colorDepth;
-                    
-                    // Advanced fingerprinting
-                    updateProgress(20, "🔍 Generating canvas fingerprint...");
-                    this.data.canvas_hash = await this.generateEnhancedCanvasFingerprint();
-                    
-                    updateProgress(40, "🖥️ Analyzing WebGL characteristics...");
-                    this.data.webgl_hash = await this.generateWebGLFingerprint();
-                    
-                    updateProgress(60, "🔊 Processing audio context...");
-                    this.data.audio_hash = await this.generateAudioFingerprint();
-                    
-                    updateProgress(80, "🖱️ Collecting interaction patterns...");
-                    this.data.mouse_movement_hash = await this.collectMouseMovementPattern();
-                    this.data.touch_pattern_hash = this.generateTouchPatternHash();
-                    
-                    // Additional security data
-                    this.data.fonts_hash = this.generateFontsFingerprint();
-                    this.data.plugins_hash = this.generatePluginsFingerprint();
-                    this.data.storage_hash = this.generateStorageFingerprint();
-                    
-                    // Behavioral data
-                    this.data.typing_rhythm_hash = await this.generateTypingRhythmHash();
-                    this.data.scroll_behavior_hash = this.generateScrollBehaviorHash();
-                    
-                    // Timestamp and session data
-                    this.data.timestamp = Date.now();
-                    this.data.session_id = this.generateSessionId();
-                    
-                    return this.data;
-                }} catch (error) {{
-                    console.error('Device data collection error:', error);
-                    return this.generateFallbackData();
-                }}
-            }}
-            
-            async generateEnhancedCanvasFingerprint() {{
-                try {{
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    
-                    // Complex drawing operations for unique fingerprint
-                    ctx.textBaseline = 'top';
-                    ctx.font = 'bold 16px Arial';
-                    ctx.fillStyle = '#ff6b35';
-                    ctx.fillRect(10, 10, 100, 30);
-                    
-                    ctx.fillStyle = '#004d7a';
-                    ctx.fillText('Enhanced Security 🔒', 15, 50);
-                    
-                    ctx.font = '12px Georgia';
-                    ctx.fillStyle = '#008080';
-                    ctx.fillText('Device Verification System', 15, 80);
-                    
-                    // Add geometric shapes
-                    ctx.beginPath();
-                    ctx.arc(200, 50, 25, 0, Math.PI * 2);
-                    ctx.fillStyle = '#ff1744';
-                    ctx.fill();
-                    
-                    // Add gradient patterns
-                    const gradient = ctx.createLinearGradient(0, 0, 300, 0);
-                    gradient.addColorStop(0, '#667eea');
-                    gradient.addColorStop(1, '#764ba2');
-                    ctx.fillStyle = gradient;
-                    ctx.fillRect(50, 100, 200, 40);
-                    
-                    // Add curved lines
-                    ctx.beginPath();
-                    ctx.moveTo(50, 160);
-                    ctx.quadraticCurveTo(150, 120, 250, 160);
-                    ctx.strokeStyle = '#333';
-                    ctx.lineWidth = 3;
-                    ctx.stroke();
-                    
-                    return this.hashString(canvas.toDataURL());
-                }} catch (e) {{
-                    return 'canvas_error_' + Date.now();
-                }}
-            }}
-            
-            async generateWebGLFingerprint() {{
-                try {{
-                    const canvas = document.createElement('canvas');
-                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-                    
-                    if (!gl) return 'webgl_unavailable';
-                    
-                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-                    if (debugInfo) {{
-                        const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
-                        const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-                        
-                        // Additional WebGL parameters
-                        const version = gl.getParameter(gl.VERSION);
-                        const shadingLanguageVersion = gl.getParameter(gl.SHADING_LANGUAGE_VERSION);
-                        const extensions = gl.getSupportedExtensions().join(',');
-                        
-                        const webglInfo = `${{vendor}}|${{renderer}}|${{version}}|${{shadingLanguageVersion}}|${{extensions}}`;
-                        return this.hashString(webglInfo);
-                    }}
-                    
-                    return this.hashString('webgl_limited_info');
-                }} catch (e) {{
-                    return 'webgl_error_' + Date.now();
-                }}
-            }}
-            
-            async generateAudioFingerprint() {{
-                try {{
-                    if (!window.AudioContext && !window.webkitAudioContext) {{
-                        return 'audio_unavailable';
-                    }}
-                    
-                    const context = new (window.AudioContext || window.webkitAudioContext)();
-                    const oscillator = context.createOscillator();
-                    const analyser = context.createAnalyser();
-                    const gainNode = context.createGain();
-                    
-                    oscillator.type = 'triangle';
-                    oscillator.frequency.setValueAtTime(1000, context.currentTime);
-                    gainNode.gain.setValueAtTime(0, context.currentTime);
-                    
-                    oscillator.connect(analyser);
-                    analyser.connect(gainNode);
-                    gainNode.connect(context.destination);
-                    
-                    oscillator.start();
-                    
-                    const frequencyData = new Uint8Array(analyser.frequencyBinCount);
-                    analyser.getByteFrequencyData(frequencyData);
-                    
-                    oscillator.stop();
-                    await context.close();
-                    
-                    const audioHash = Array.from(frequencyData.slice(0, 50)).join(',');
-                    return this.hashString(audioHash);
-                }} catch (e) {{
-                    return 'audio_error_' + Date.now();
-                }}
-            }}
-            
-            async collectMouseMovementPattern() {{
-                return new Promise((resolve) => {{
-                    let movements = [];
-                    let startTime = Date.now();
-                    
-                    const collectMovement = (e) => {{
-                        if (movements.length  {{
-                        document.removeEventListener('mousemove', collectMovement);
-                        
-                        if (movements.length > 0) {{
-                            const pattern = movements.map(m => `${{m.x}},${{m.y}},${{m.time}}`).join('|');
-                            resolve(this.hashString(pattern));
-                        }} else {{
-                            resolve('no_mouse_movement');
-                        }}
-                    }}, 3000);
-                }});
-            }}
-            
-            generateTouchPatternHash() {{
-                const touchSupport = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-                const maxTouchPoints = navigator.maxTouchPoints || 0;
-                return this.hashString(`${{touchSupport}}|${{maxTouchPoints}}`);
-            }}
-            
-            generateFontsFingerprint() {{
-                const testFonts = [
-                    'Arial', 'Times New Roman', 'Courier New', 'Helvetica', 'Georgia',
-                    'Verdana', 'Comic Sans MS', 'Trebuchet MS', 'Impact', 'Palatino',
-                    'Tahoma', 'Garamond', 'Bookman', 'Avant Garde', 'Optima'
-                ];
-                
-                const availableFonts = testFonts.filter(font => this.isFontAvailable(font));
-                return this.hashString(availableFonts.join(','));
-            }}
-            
-            isFontAvailable(fontName) {{
-                const testString = 'mmmmmmmmmmlli';
-                const testSize = '72px';
+        function collectDeviceData() {{
+            deviceData = {{
+                screen_resolution: screen.width + 'x' + screen.height,
+                user_agent_hash: btoa(navigator.userAgent).slice(-20),
+                timezone_offset: new Date().getTimezoneOffset(),
+                platform: navigator.platform,
+                canvas_hash: generateCanvasHash(),
+                hardware_concurrency: navigator.hardwareConcurrency || 0,
+                memory: navigator.deviceMemory || 0,
+                timestamp: Date.now()
+            }};
+        }}
+        
+        function generateCanvasHash() {{
+            try {{
                 const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                
-                context.font = testSize + ' monospace';
-                const baselineSize = context.measureText(testString).width;
-                
-                context.font = testSize + ' ' + fontName + ', monospace';
-                const newSize = context.measureText(testString).width;
-                
-                return newSize !== baselineSize;
+                const ctx = canvas.getContext('2d');
+                ctx.textBaseline = 'top';
+                ctx.font = '14px Arial';
+                ctx.fillText('Device Security Check', 2, 2);
+                return btoa(canvas.toDataURL()).slice(-20);
+            }} catch (e) {{
+                return 'canvas_error';
             }}
-            
-            generatePluginsFingerprint() {{
-                if (navigator.plugins && navigator.plugins.length > 0) {{
-                    const plugins = Array.from(navigator.plugins).map(p => `${{p.name}}|${{p.filename}}`);
-                    return this.hashString(plugins.join(','));
-                }}
-                return 'no_plugins';
-            }}
-            
-            generateStorageFingerprint() {{
-                try {{
-                    const storageInfo = {{
-                        localStorage: typeof localStorage !== 'undefined',
-                        sessionStorage: typeof sessionStorage !== 'undefined',
-                        indexedDB: typeof indexedDB !== 'undefined',
-                        webSQL: typeof openDatabase !== 'undefined'
-                    }};
-                    return this.hashString(JSON.stringify(storageInfo));
-                }} catch (e) {{
-                    return 'storage_error';
-                }}
-            }}
-            
-            async generateTypingRhythmHash() {{
-                // Simulate typing pattern (in real app, collect from user interaction)
-                return this.hashString('typing_pattern_placeholder');
-            }}
-            
-            generateScrollBehaviorHash() {{
-                // Placeholder for scroll behavior analysis
-                return this.hashString('scroll_behavior_placeholder');
-            }}
-            
-            generateSessionId() {{
-                return this.hashString(Date.now() + Math.random().toString());
-            }}
-            
-            generateFallbackData() {{
-                return {{
-                    fallback: true,
-                    screen_resolution: `${{screen.width}}x${{screen.height}}`,
-                    user_agent_hash: this.hashString(navigator.userAgent),
-                    platform: navigator.platform,
-                    timestamp: Date.now(),
-                    error: 'data_collection_failed'
-                }};
-            }}
-            
-            hashString(str) {{
-                let hash = 0;
-                if (str.length === 0) return hash.toString();
-                
-                for (let i = 0; i  {{
-                updateProgress(100, "🎯 System ready - Click to start verification");
-                document.getElementById('status').className = 'status success';
-                document.getElementById('status').innerHTML = '✅ Enhanced verification system initialized successfully';
-                document.getElementById('verifyBtn').disabled = false;
-            }}, 2000);
         }}
         
         function updateProgress(percent, message) {{
@@ -1423,93 +1142,45 @@ async def verification_page(user_id: int):
             document.getElementById('status').innerHTML = message;
         }}
         
-        function showFingerprintDetails(data) {{
-            const details = document.getElementById('fingerprintDetails');
-            details.style.display = 'block';
-            details.innerHTML = `
-🔑 Device Signature Preview:
-Basic Hash: ${{data.user_agent_hash || 'N/A'}}...
-Canvas Hash: ${{data.canvas_hash || 'N/A'}}...
-WebGL Hash: ${{data.webgl_hash || 'N/A'}}...
-Screen: ${{data.screen_resolution || 'N/A'}}
-Platform: ${{data.platform || 'N/A'}}
-Timezone: ${{data.timezone_offset || 'N/A'}}
-Hardware: ${{data.hardware_concurrency || 'N/A'}} cores
-            `;
-        }}
-        
         async function verifyDevice() {{
-            if (verificationStarted) return;
-            verificationStarted = true;
-            
-            document.getElementById('status').className = 'status loading';
+            updateProgress(20, '🔄 Collecting device information...');
             document.getElementById('verifyBtn').disabled = true;
             
-            updateProgress(5, "🔄 Starting comprehensive device analysis...");
+            collectDeviceData();
+            updateProgress(60, '🔄 Verifying device security...');
             
             try {{
-                const collector = new EnhancedDeviceCollector();
-                deviceData = await collector.collectComprehensiveData();
-                
-                updateProgress(90, "🔐 Finalizing security verification...");
-                showFingerprintDetails(deviceData);
-                
-                updateProgress(95, "📡 Sending verification data...");
-                
                 const response = await fetch('/api/verify-device', {{
                     method: 'POST',
-                    headers: {{
-                        'Content-Type': 'application/json'
-                    }},
-                    body: JSON.stringify({{
-                        user_id: USER_ID,
-                        device_data: deviceData
-                    }})
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ user_id: USER_ID, device_data: deviceData }})
                 }});
                 
                 const result = await response.json();
-                updateProgress(100, "✅ Verification complete!");
+                updateProgress(100, 'Verification complete!');
                 
                 if (result.success) {{
-                    document.getElementById('status').innerHTML = '🎉 Device verified successfully!Account security activated. You can now close this page.';
+                    document.getElementById('status').innerHTML = '✅ Device verified successfully!';
                     document.getElementById('status').className = 'status success';
                     
                     setTimeout(() => {{
                         if (window.Telegram && window.Telegram.WebApp) {{
                             window.Telegram.WebApp.close();
-                        }} else if (window.close) {{
-                            window.close();
                         }}
-                    }}, 3000);
+                    }}, 2000);
                 }} else {{
-                                        document.getElementById('status').innerHTML = `❌ ${result.message}`;
+                    document.getElementById('status').innerHTML = '❌ ' + result.message;
                     document.getElementById('status').className = 'status error';
                     document.getElementById('verifyBtn').innerHTML = '🔄 Try Again';
                     document.getElementById('verifyBtn').disabled = false;
-                    verificationStarted = false;
-                }
-            } catch (error) {
-                console.error('Verification error:', error);
-                updateProgress(100, "❌ Network error occurred");
-                document.getElementById('status').innerHTML = '❌ Network error. Please check your connection and try again.';
+                }}
+            }} catch (error) {{
+                updateProgress(0, '❌ Network error');
+                document.getElementById('status').innerHTML = '❌ Network error. Please try again.';
                 document.getElementById('status').className = 'status error';
-                document.getElementById('verifyBtn').innerHTML = '🔄 Retry Verification';
                 document.getElementById('verifyBtn').disabled = false;
-                verificationStarted = false;
-            }
-        }
-        
-        // Start initialization when page loads
-        window.addEventListener('load', () => {
-            setTimeout(initializeVerification, 500);
-        });
-        
-        // Handle page visibility changes
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && !verificationStarted) {
-                initializeVerification();
-            }
-        });
+            }}
+        }}
     </script>
 </body>
 </html>
@@ -1525,7 +1196,7 @@ def authenticate_admin(credentials: HTTPBasicCredentials = Depends(security)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return credentials.username
 
-# Enhanced API Routes
+# API Routes
 @app.post("/webhook")
 async def telegram_webhook(update: dict):
     try:
@@ -1539,7 +1210,7 @@ async def telegram_webhook(update: dict):
         else:
             return {"status": "error", "message": "Invalid update format"}
     except Exception as e:
-        logger.error(f"❌ Webhook error: {e}")
+        logger.error(f"Webhook error: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.get("/health")
@@ -1550,204 +1221,57 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat(),
         "mongodb_connected": db_connected,
         "telegram_bot_initialized": wallet_bot.initialized if wallet_bot else False,
-        "version": "3.0.0-complete",
-        "features": {
-            "device_fingerprinting": "advanced_multi_layer",
-            "fraud_prevention": "real_time_detection",
-            "user_management": "comprehensive_analytics",
-            "security_monitoring": "24_7_active"
-        }
+        "version": "3.0.0-complete"
     }
 
 @app.get("/")
 async def root():
     return {
-        "message": "🤖 Enhanced Wallet Bot - Complete Security Solution",
+        "message": f"{EMOJI['rocket']} Enhanced Wallet Bot - Complete Security Solution",
         "status": "running",
-        "platform": "Production Ready",
-        "security_features": [
-            "Advanced Multi-Layer Device Fingerprinting",
+        "features": [
+            "Advanced Device Fingerprinting",
             "One Device One Account Policy",
-            "Real-time Fraud Detection",
-            "Behavioral Pattern Analysis",
-            "Cross-Device Correlation Checks",
-            "Enhanced User Analytics"
-        ],
-        "endpoints": {
-            "webhook": "/webhook",
-            "health": "/health",
-            "verify": "/verify?user_id=<id>",
-            "admin": "/api/admin/dashboard",
-            "stats": "/api/admin/stats"
-        },
-        "admin_features": [
-            "Real-time User Monitoring",
-            "Security Event Tracking",
-            "Comprehensive Analytics Dashboard",
-            "Device Conflict Management",
-            "Transaction Monitoring"
+            "Enhanced Security System",
+            "Complete Admin Dashboard"
         ]
     }
 
 @app.get("/api/admin/dashboard")
 async def admin_dashboard(admin: str = Depends(authenticate_admin)):
-    """Complete Admin Dashboard with Enhanced Features"""
+    """Complete Admin Dashboard"""
     try:
         stats = await user_model.get_user_stats()
         
-        # Additional admin analytics
-        recent_security_events = []
-        top_referrers = []
-        device_conflicts = 0
-        
-        if db_connected and db_client:
-            # Get recent security events
-            security_logs = db_client.walletbot.security_logs
-            recent_events_cursor = security_logs.find(
-                {"timestamp": {"$gte": datetime.utcnow() - timedelta(hours=24)}}
-            ).sort("timestamp", -1).limit(10)
-            
-            async for event in recent_events_cursor:
-                recent_security_events.append({
-                    "user_id": event.get("user_id"),
-                    "event_type": event.get("event_type"),
-                    "timestamp": event.get("timestamp").strftime("%H:%M:%S"),
-                    "details": event.get("details", {})
-                })
-            
-            # Get top referrers
-            users_collection = db_client.walletbot.users
-            top_referrers_cursor = users_collection.find(
-                {"total_referrals": {"$gt": 0}}
-            ).sort("total_referrals", -1).limit(5)
-            
-            async for user in top_referrers_cursor:
-                top_referrers.append({
-                    "user_id": user.get("user_id"),
-                    "username": user.get("username", "N/A"),
-                    "total_referrals": user.get("total_referrals", 0),
-                    "referral_earnings": user.get("referral_earnings", 0)
-                })
-            
-            # Count device conflicts
-            device_collection = db_client.walletbot.device_fingerprints
-            device_conflicts = await security_logs.count_documents({
-                "event_type": {"$in": ["DEVICE_CONFLICT_BASIC", "DEVICE_CONFLICT_ADVANCED"]},
-                "timestamp": {"$gte": datetime.utcnow() - timedelta(hours=24)}
-            })
-        
         return {
-            "admin_panel": "Enhanced Control Dashboard - Complete Edition",
+            "admin_panel": "Enhanced Control Dashboard",
             "system_overview": {
                 "total_users": stats["total_users"],
                 "verified_users": stats["verified_users"],
                 "pending_verification": stats["pending_verification"],
-                "banned_users": stats["banned_users"],
-                "unique_devices": stats["total_devices"],
-                "device_conflicts_24h": device_conflicts
-            },
-            "growth_metrics": {
-                "new_registrations_24h": stats["recent_registrations"],
-                "verification_rate": f"{(stats['verified_users']/max(stats['total_users'], 1)*100):.1f}%",
-                "device_user_ratio": f"{(stats['total_devices']/max(stats['total_users'], 1)):.2f}",
-                "fraud_prevention_rate": f"{(device_conflicts/max(stats['recent_registrations'], 1)*100):.1f}%"
+                "unique_devices": stats["total_devices"]
             },
             "security_monitoring": {
                 "security_events_24h": stats["security_events_24h"],
-                "recent_security_events": recent_security_events,
-                "fraud_detection": "Real-time Active",
-                "device_fingerprinting": "Multi-layer Enhanced"
+                "verification_rate": f"{(stats['verified_users']/max(stats['total_users'], 1)*100):.1f}%"
             },
-            "top_performers": {
-                "top_referrers": top_referrers,
-                "highest_earners": "Feature Available"
-            },
-            "financial_overview": {
-                "total_wallet_balance": "₹0.00 (Coming Soon)",
-                "total_referral_bonuses": "₹0.00 (Coming Soon)",
-                "pending_withdrawals": "₹0.00 (Coming Soon)"
-            },
-            "system_health": {
-                "database_status": "Connected" if db_connected else "Disconnected",
-                "bot_status": "Active" if wallet_bot and wallet_bot.initialized else "Inactive",
-                "webhook_status": "Configured",
-                "uptime": "99.9%"
-            },
-            "expandable_features": {
-                "campaign_management": "Ready for Implementation",
-                "withdrawal_system": "Architecture Prepared",
-                "advanced_analytics": "Data Structure Ready",
-                "automated_support": "Framework Available",
-                "multi_language_support": "Infrastructure Ready"
-            },
-            "management_tools": [
-                "User Account Management",
-                "Device Verification Override",
-                "Security Event Investigation",
-                "Bulk Operations Support",
-                "Report Generation System",
-                "Real-time Monitoring Dashboard"
-            ]
+            "status": "All systems operational"
         }
     except Exception as e:
-        logger.error(f"❌ Admin dashboard error: {e}")
+        logger.error(f"Admin dashboard error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/admin/stats")
-async def admin_detailed_stats(admin: str = Depends(authenticate_admin)):
-    """Detailed statistics for admin analysis"""
-    try:
-        stats = await user_model.get_user_stats()
-        
-        # Extended analytics
-        extended_stats = {
-            "user_analytics": {
-                "total_users": stats["total_users"],
-                "verified_users": stats["verified_users"],
-                "verification_pending": stats["pending_verification"],
-                "banned_accounts": stats["banned_users"],
-                "active_last_24h": 0,  # Can be implemented
-                "active_last_7d": 0    # Can be implemented
-            },
-            "device_analytics": {
-                "unique_devices": stats["total_devices"],
-                "devices_per_user_avg": stats["total_devices"] / max(stats["total_users"], 1),
-                "device_conflicts_detected": 0,  # From security logs
-                "suspicious_patterns": 0         # From security analysis
-            },
-            "security_metrics": {
-                "security_events_total": stats["security_events_24h"],
-                "verification_success_rate": (stats["verified_users"] / max(stats["total_users"], 1)) * 100,
-                "fraud_prevention_score": 95.5,  # Calculated metric
-                "system_integrity": "Excellent"
-            },
-            "growth_tracking": {
-                "daily_registrations": stats["recent_registrations"],
-                "weekly_growth_rate": 0,    # Can be calculated
-                "monthly_growth_rate": 0,   # Can be calculated
-                "retention_rate": 0         # Can be calculated
-            }
-        }
-        
-        return extended_stats
-        
-    except Exception as e:
-        logger.error(f"❌ Admin stats error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Enhanced startup event
+# Startup event
 @app.on_event("startup")
 async def startup_event():
     global wallet_bot
     
-    logger.info("🚀 Starting Complete Enhanced Wallet Bot System...")
+    logger.info("Starting Complete Enhanced Wallet Bot System...")
     
-    # Initialize database with enhanced connection
+    # Initialize database
     db_success = await init_database()
-    if not db_success:
-        logger.error("❌ Database initialization failed")
     
-    # Initialize bot with comprehensive features
+    # Initialize bot
     wallet_bot = WalletBot()
     
     if wallet_bot.initialized and wallet_bot.application:
@@ -1756,7 +1280,7 @@ async def startup_event():
             await wallet_bot.application.initialize()
             await wallet_bot.application.start()
             
-            # Configure webhook with enhanced settings
+            # Set webhook
             webhook_url = f"{RENDER_EXTERNAL_URL}/webhook"
             await wallet_bot.bot.delete_webhook(drop_pending_updates=True)
             await asyncio.sleep(3)
@@ -1768,48 +1292,41 @@ async def startup_event():
             )
             
             if result:
-                logger.info(f"✅ Complete enhanced webhook configured: {webhook_url}")
+                logger.info(f"Enhanced webhook configured: {webhook_url}")
             else:
-                logger.error("❌ Webhook configuration failed")
+                logger.error("Webhook configuration failed")
                 
         except Exception as e:
-            logger.error(f"❌ Bot startup error: {e}")
+            logger.error(f"Bot startup error: {e}")
     
-    logger.info("🎉 Complete Enhanced Wallet Bot System Ready!")
-    logger.info("🔒 Advanced Security Features: ACTIVE")
-    logger.info("👥 User Management System: READY")
-    logger.info("📊 Analytics Dashboard: AVAILABLE")
-    logger.info("🛡️ Fraud Prevention: ENABLED")
+    logger.info("Complete Enhanced Wallet Bot System Ready!")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("🔄 Shutting down complete enhanced bot system...")
+    logger.info("Shutting down complete enhanced bot system...")
     if wallet_bot and wallet_bot.application:
         try:
             await wallet_bot.bot.delete_webhook()
             await wallet_bot.application.stop()
             await wallet_bot.application.shutdown()
             await wallet_bot.bot.shutdown()
-            logger.info("✅ Bot shutdown completed successfully")
+            logger.info("Bot shutdown completed successfully")
         except Exception as e:
-            logger.error(f"❌ Shutdown error: {e}")
+            logger.error(f"Shutdown error: {e}")
     
     if db_client:
         try:
             db_client.close()
-            logger.info("✅ Database connection closed")
+            logger.info("Database connection closed")
         except:
             pass
     
-    logger.info("✅ Complete system shutdown finished")
+    logger.info("Complete system shutdown finished")
 
 # Main application entry point
 if __name__ == "__main__":
     import uvicorn
-    logger.info(f"🚀 Starting Complete Enhanced Secure Wallet Bot - Port {PORT}")
-    logger.info("🔒 Advanced Multi-Layer Device Fingerprinting: ENABLED")
-    logger.info("👥 One Device One Account Policy: ENFORCED")
-    logger.info("📊 Real-time Analytics & Monitoring: ACTIVE")
+    logger.info(f"Starting Complete Enhanced Secure Wallet Bot - Port {PORT}")
     
     uvicorn.run(
         app, 
