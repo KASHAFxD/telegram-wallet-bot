@@ -1,8 +1,4 @@
-**भाई! Main तुमको complete 100% working code देता हूं जो properly one-device-one-account policy implement करता है, enhanced device fingerprinting के साथ, और सभी security features के साथ ready-to-deploy है:**
 
-## **Complete Enhanced Wallet Bot - 100% Working Code:**
-
-```python
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
