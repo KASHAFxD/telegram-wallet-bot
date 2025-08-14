@@ -63,7 +63,7 @@ class Database:
 
 db = Database()
 
-# Enhanced User Model with Device Security
+# Enhanced User Model with FIXED Boolean Checks
 class UserModel:
     def __init__(self):
         self.collection = None
@@ -71,7 +71,8 @@ class UserModel:
             self.collection = db.client.walletbot.users
     
     async def create_user(self, user_data: dict):
-        if not self.collection:
+        # ✅ FIXED: Changed from 'if not self.collection:' to explicit None check
+        if self.collection is None:
             return None
         try:
             user_data.update({
@@ -94,7 +95,8 @@ class UserModel:
             return None
     
     async def get_user(self, user_id: int):
-        if not self.collection:
+        # ✅ FIXED: Changed from 'if not self.collection:' to explicit None check
+        if self.collection is None:
             return None
         try:
             return await self.collection.find_one({"user_id": user_id})
@@ -103,7 +105,8 @@ class UserModel:
             return None
     
     async def update_user(self, user_id: int, update_data: dict):
-        if not self.collection:
+        # ✅ FIXED: Changed from 'if not self.collection:' to explicit None check
+        if self.collection is None:
             return False
         try:
             update_data["updated_at"] = datetime.utcnow()
@@ -118,7 +121,8 @@ class UserModel:
     
     async def check_device_security(self, user_id: int):
         """Check if user's device is verified"""
-        if not self.collection:
+        # ✅ FIXED: Changed from 'if not self.collection:' to explicit None check
+        if self.collection is None:
             return False
         try:
             user = await self.collection.find_one({
@@ -133,7 +137,8 @@ class UserModel:
     
     async def verify_device(self, user_id: int, fingerprint: str, device_data: dict):
         """Verify user's device with fingerprint"""
-        if not self.collection:
+        # ✅ FIXED: Changed from 'if not self.collection:' to explicit None check
+        if self.collection is None:
             return False
         
         try:
@@ -170,7 +175,8 @@ class UserModel:
             return False
     
     async def add_to_wallet(self, user_id: int, amount: float, transaction_type: str, description: str):
-        if not self.collection:
+        # ✅ FIXED: Changed from 'if not self.collection:' to explicit None check
+        if self.collection is None:
             return False
         
         try:
