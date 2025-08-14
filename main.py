@@ -15,6 +15,14 @@ from datetime import datetime, timedelta
 import logging
 import traceback
 import uuid
+# Define emoji constants at top of file
+EMOJI_CHECK = "\u2705"      # ✅
+EMOJI_CROSS = "\u274C"      # ❌  
+EMOJI_PENDING = "\u2B1C"    # ⬜
+EMOJI_WARNING = "\u26A0"    # ⚠️
+
+# Use in code
+status = f"Verification: {EMOJI_CHECK if verified else EMOJI_PENDING}"
 
 # Configure logging
 logging.basicConfig(
@@ -743,8 +751,8 @@ Choose an option below to get started:"""
                 parse_mode="Markdown"
             )
             
-            logger.info(f"✅ Referral bonus processed: {referrer_id} = 10 else "🔳"} {"Achieved" if user.get('total_referrals', 0) >= 10 else "Pending"}
-• 50 Referrals: {"✅" if user.get('total_referrals', 0) >= 50 else "🔳"} {"Achieved" if user.get('total_referrals', 0) >= 50 else "Pending"}"""
+            logger.info(f"✅ Referral bonus processed: {referrer_id} -> {user_id}")
+
         
         keyboard = [
             [InlineKeyboardButton("📤 Share Link", url=f"https://t.me/share/url?url={referral_link}")],
