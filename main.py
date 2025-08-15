@@ -8047,7 +8047,6 @@ async def telegram_webhook_handler(request: Request):
 
 @app.on_event("startup")
 async def startup_event():
-    """Comprehensive application startup sequence"""
     startup_start_time = datetime.utcnow()
     
     logger.info("=" * 80)
@@ -8070,40 +8069,42 @@ async def startup_event():
         startup_tasks.append("❌ Database: Failed")
     
     # Initialize bot - FIXED VERSION
-logger.info("🤖 Initializing Telegram bot...")
-try:
-    # Step 1: Check BOT_TOKEN
-    if not BOT_TOKEN or BOT_TOKEN == "REPLACE_ME":
-        logger.error("❌ BOT_TOKEN not configured properly")
-        startup_tasks.append("❌ Telegram Bot: Token Missing")
-        wallet_bot.initialized = False
-    else:
-        # Step 2: Create bot instance manually
-        from telegram import Bot
-        from telegram.ext import ApplicationBuilder
-        
-        wallet_bot.bot = Bot(token=BOT_TOKEN)
-        wallet_bot.application = ApplicationBuilder().token(BOT_TOKEN).build()
-        
-        # Step 3: Setup handlers
-        wallet_bot.setup_handlers()
-        
-        # Step 4: Initialize async components
-        await wallet_bot.bot.initialize()
-        await wallet_bot.application.initialize() 
-        await wallet_bot.application.start()
-        
-        # Step 5: Mark as initialized
-        wallet_bot.initialized = True
-        
-        logger.info("✅ Telegram bot initialized successfully")
-        startup_tasks.append("✅ Telegram Bot: Initialized")
+    logger.info("🤖 Initializing Telegram bot...")
+    try:
+        # Check BOT_TOKEN
+        if not BOT_TOKEN or BOT_TOKEN == "REPLACE_ME":
+            logger.error("❌ BOT_TOKEN not configured properly")
+            startup_tasks.append("❌ Telegram Bot: Token Missing")
+            wallet_bot.initialized = False
+        else:
+            # Create bot instance
+            from telegram import Bot
+            from telegram.ext import ApplicationBuilder
+            
+            wallet_bot.bot = Bot(token=BOT_TOKEN)
+            wallet_bot.application = ApplicationBuilder().token(BOT_TOKEN).build()
+            
+            # Setup handlers
+            wallet_bot.setup_handlers()
+            
+            # Initialize async components (ALL INSIDE THE TRY BLOCK)
+            await wallet_bot.bot.initialize()
+            await wallet_bot.application.initialize() 
+            await wallet_bot.application.start()
+            
+            # Mark as initialized
+            wallet_bot.initialized = True
+            
+            logger.info("✅ Telegram bot initialized successfully")
+            startup_tasks.append("✅ Telegram Bot: Initialized")
 
-except Exception as e:
-    logger.error(f"❌ Telegram bot initialization error: {e}")
-    logger.error(f"❌ Error details: {type(e).__name__}: {e}")
-    startup_tasks.append("❌ Telegram Bot: Failed")
-    wallet_bot.initialized = False
+    except Exception as e:
+        logger.error(f"❌ Telegram bot initialization error: {e}")
+        startup_tasks.append("❌ Telegram Bot: Failed")
+        wallet_bot.initialized = False
+    
+    # Rest of the startup code continues normally...
+
 
     
     # Phase 2: Payment System
