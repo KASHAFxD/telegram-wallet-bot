@@ -8088,9 +8088,9 @@ async def startup_event():
             wallet_bot.setup_handlers()
             
             # Initialize async components (ALL INSIDE THE TRY BLOCK)
-            await wallet_bot.bot.initialize()
-            await wallet_bot.application.initialize() 
-            await wallet_bot.application.start()
+        await wallet_bot.bot.initialize()
+        await wallet_bot.application.initialize() 
+        await wallet_bot.application.start()
             
             # Mark as initialized
             wallet_bot.initialized = True
