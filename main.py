@@ -1980,7 +1980,7 @@ class PaymentManager:
                 if payment_result['success']:
                     # Update withdrawal as completed
                     collection = self.user_model.get_collection('withdrawal_requests')
-                    if collection:
+                    if collection is not None:
                         await collection.update_one(
                             {"request_id": withdrawal_request['request_id']},
                             {
@@ -2553,7 +2553,7 @@ class APIIntegrationManager:
             }
             
             collection = self.user_model.get_collection('api_keys')
-            if collection:
+            if collection is not None:
                 await collection.insert_one(api_doc)
             
             logger.info(f"🔑 API key generated for project: {project_name}")
@@ -4338,7 +4338,7 @@ Hi {first_name}! 👋
             if result["success"]:
                 # Get withdrawal details for notification
                 collection = user_model.get_collection('withdrawal_requests')
-                if collection:
+                if collection is not None:
                     withdrawal = await collection.find_one({"request_id": request_id})
                     if withdrawal:
                         # Notify user
@@ -5446,7 +5446,7 @@ async def approve_withdrawal_api(
         if result["success"]:
             # Get withdrawal details for logging
             collection = user_model.get_collection('withdrawal_requests')
-            if collection:
+            if collection is not None:
                 withdrawal = await collection.find_one({"request_id": request_id})
                 if withdrawal:
                     logger.info(f"💰 Withdrawal approved: {request_id} (User {withdrawal['user_id']}, Amount Rs.{withdrawal['amount']:.2f})")
@@ -5501,7 +5501,7 @@ async def get_withdrawal_statistics_api(username: str = Depends(authenticate_adm
         
         # Add additional statistics
         collection = user_model.get_collection('withdrawal_requests')
-        if collection:
+        if collection is not None:
             # Today's statistics
             today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             today_stats = await collection.aggregate([
@@ -8236,7 +8236,7 @@ async def shutdown_event():
             shutdown_tasks.append("❌ Telegram Bot: Shutdown Failed")
     
     # Close database connections
-    if db_client:
+    if db_client is not None:
         try:
             db_client.close()
             logger.info("✅ Database connections closed")
