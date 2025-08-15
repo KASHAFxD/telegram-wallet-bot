@@ -8093,10 +8093,10 @@ async def startup_event():
         await wallet_bot.application.start()
             
             # Mark as initialized
-            wallet_bot.initialized = True
+        wallet_bot.initialized = True
             
-            logger.info("✅ Telegram bot initialized successfully")
-            startup_tasks.append("✅ Telegram Bot: Initialized")
+        logger.info("✅ Telegram bot initialized successfully")
+        startup_tasks.append("✅ Telegram Bot: Initialized")
 
     except Exception as e:
         logger.error(f"❌ Telegram bot initialization error: {e}")
