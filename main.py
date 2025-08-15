@@ -8069,25 +8069,42 @@ async def startup_event():
         logger.error("❌ Database connection failed - continuing with limited functionality")
         startup_tasks.append("❌ Database: Failed")
     
-    # Initialize bot
-    logger.info("🤖 Initializing Telegram bot...")
-    if wallet_bot and wallet_bot.setup_bot():
-        logger.info("✅ Telegram bot initialized")
-        startup_tasks.append("✅ Telegram Bot: Initialized")
-        
-        # Initialize bot application
-        try:
-            await wallet_bot.bot.initialize()
-            await wallet_bot.application.initialize()
-            await wallet_bot.application.start()
-            logger.info("✅ Bot application started")
-            startup_tasks.append("✅ Bot Application: Started")
-        except Exception as e:
-            logger.error(f"❌ Bot application startup error: {e}")
-            startup_tasks.append("❌ Bot Application: Failed")
+    # Initialize bot - FIXED VERSION
+logger.info("🤖 Initializing Telegram bot...")
+try:
+    # Step 1: Check BOT_TOKEN
+    if not BOT_TOKEN or BOT_TOKEN == "REPLACE_ME":
+        logger.error("❌ BOT_TOKEN not configured properly")
+        startup_tasks.append("❌ Telegram Bot: Token Missing")
+        wallet_bot.initialized = False
     else:
-        logger.error("❌ Telegram bot initialization failed")
-        startup_tasks.append("❌ Telegram Bot: Failed")
+        # Step 2: Create bot instance manually
+        from telegram import Bot
+        from telegram.ext import ApplicationBuilder
+        
+        wallet_bot.bot = Bot(token=BOT_TOKEN)
+        wallet_bot.application = ApplicationBuilder().token(BOT_TOKEN).build()
+        
+        # Step 3: Setup handlers
+        wallet_bot.setup_handlers()
+        
+        # Step 4: Initialize async components
+        await wallet_bot.bot.initialize()
+        await wallet_bot.application.initialize() 
+        await wallet_bot.application.start()
+        
+        # Step 5: Mark as initialized
+        wallet_bot.initialized = True
+        
+        logger.info("✅ Telegram bot initialized successfully")
+        startup_tasks.append("✅ Telegram Bot: Initialized")
+
+except Exception as e:
+    logger.error(f"❌ Telegram bot initialization error: {e}")
+    logger.error(f"❌ Error details: {type(e).__name__}: {e}")
+    startup_tasks.append("❌ Telegram Bot: Failed")
+    wallet_bot.initialized = False
+
     
     # Phase 2: Payment System
     logger.info("📋 Phase 2: Payment System Initialization")
