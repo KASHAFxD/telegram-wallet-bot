@@ -31,7 +31,7 @@ PORT = int(os.getenv("PORT", 10000))
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", 7194000836))
 
 # Initialize FastAPI
-app = FastAPI(title="Enhanced Wallet Bot - Final Working Version", version="4.0.0")
+app = FastAPI(title="Enhanced Wallet Bot - Strict Device Control", version="5.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 security = HTTPBasic()
 
@@ -58,46 +58,55 @@ EMOJI = {
 db_client = None
 db_connected = False
 
-# Temporary user storage (fallback)
-temp_users = {}
-temp_devices = {}
-
 # Fixed database initialization
 async def init_database():
     global db_client, db_connected
     try:
-        # Clean MongoDB URL - remove any problematic characters
+        # Clean MongoDB URL
         clean_mongodb_url = MONGODB_URL.strip().replace('\n', '').replace('\r', '')
         
-        # Simple connection without write concern complications
         db_client = AsyncIOMotorClient(
             clean_mongodb_url,
             serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=10000,
-            maxPoolSize=20
+            connectTimeoutMS=10000
         )
         
         # Test connection
         await db_client.admin.command('ping')
         db_connected = True
-        logger.info("Database connected successfully - MongoDB Atlas")
+        logger.info("Database connected successfully")
         
-        # Try to create basic indexes (non-critical)
-        try:
-            await db_client.walletbot.users.create_index("user_id", unique=True)
-            await db_client.walletbot.device_fingerprints.create_index("basic_fingerprint")
-            logger.info("Database indexes created successfully")
-        except Exception as index_error:
-            logger.warning(f"Index creation skipped: {index_error}")
-            # Continue without indexes - not critical
+        # Clear old data and setup fresh collections
+        await setup_fresh_database()
         
         return True
     except Exception as e:
-        logger.error(f"MongoDB connection failed, using temporary storage: {e}")
+        logger.error(f"Database connection failed: {e}")
         db_connected = False
         return False
 
-# Enhanced User Model with Fallback Storage
+async def setup_fresh_database():
+    """Clear old data and setup fresh collections"""
+    try:
+        if db_client:
+            # Clear all old collections for fresh start
+            await db_client.walletbot.users.delete_many({})
+            await db_client.walletbot.device_fingerprints.delete_many({})
+            await db_client.walletbot.security_logs.delete_many({})
+            
+            logger.info("Old database data cleared - Fresh start initiated")
+            
+            # Create indexes for better performance
+            await db_client.walletbot.users.create_index("user_id", unique=True)
+            await db_client.walletbot.device_fingerprints.create_index("fingerprint", unique=True)
+            await db_client.walletbot.device_fingerprints.create_index("user_id")
+            
+            logger.info("Fresh database indexes created")
+            
+    except Exception as e:
+        logger.warning(f"Database setup warning: {e}")
+
+# Strict User Model - One Device One Account Only
 class UserModel:
     def __init__(self):
         pass
@@ -112,289 +121,330 @@ class UserModel:
             return db_client.walletbot.device_fingerprints
         return None
     
+    def get_security_logs_collection(self):
+        if db_client is not None and db_connected:
+            return db_client.walletbot.security_logs
+        return None
+    
     async def create_user(self, user_data: dict):
-        """Create user with database fallback to temporary storage"""
+        """Create user - ALWAYS starts unverified"""
         collection = self.get_collection()
+        if collection is None:
+            return False
+        
         user_id = user_data["user_id"]
         
-        # Add default fields
-        user_data.update({
-            "created_at": datetime.utcnow(),
-            "wallet_balance": 0.0,
-            "total_earned": 0.0,
-            "referral_earnings": 0.0,
-            "total_referrals": 0,
-            "is_active": True,
-            "is_banned": False,
-            "device_verified": False,
-            "device_fingerprint": None,
-            "verification_status": "pending",
-            "risk_score": 0.0,
-            "last_activity": datetime.utcnow(),
-            "referred_by": user_data.get("referred_by"),
-            "referral_code": str(uuid.uuid4())[:8]
-        })
-        
-        if collection is not None:
-            try:
-                # Try database first
-                existing_user = await collection.find_one({"user_id": user_id})
-                if not existing_user:
-                    # Insert new user
-                    await collection.insert_one(user_data.copy())
-                    logger.info(f"New user created in database: {user_id}")
-                else:
-                    logger.info(f"Existing user found in database: {user_id}")
+        try:
+            # Check if user already exists
+            existing_user = await collection.find_one({"user_id": user_id})
+            if existing_user:
+                logger.info(f"Existing user found: {user_id}")
                 return True
-            except Exception as db_error:
-                logger.warning(f"Database insert failed, using temp storage: {db_error}")
-                # Fallback to temporary storage
-                temp_users[user_id] = user_data
-                logger.info(f"User stored temporarily: {user_id}")
-                return True
-        else:
-            # Use temporary storage
-            temp_users[user_id] = user_data
-            logger.info(f"User created in temporary storage: {user_id}")
+            
+            # Create new user - ALWAYS UNVERIFIED initially
+            user_data.update({
+                "created_at": datetime.utcnow(),
+                "wallet_balance": 0.0,
+                "total_earned": 0.0,
+                "referral_earnings": 0.0,
+                "total_referrals": 0,
+                "is_active": True,
+                "is_banned": False,
+                "device_verified": False,  # ALWAYS FALSE initially
+                "device_fingerprint": None,
+                "verification_status": "pending",
+                "last_activity": datetime.utcnow(),
+                "referred_by": user_data.get("referred_by"),
+                "referral_code": str(uuid.uuid4())[:8]
+            })
+            
+            await collection.insert_one(user_data)
+            logger.info(f"New user created (UNVERIFIED): {user_id}")
+            
+            # Log user creation
+            await self.log_security_event(user_id, "USER_CREATED", {
+                "username": user_data.get("username"),
+                "verification_required": True
+            })
+            
             return True
+            
+        except Exception as e:
+            logger.error(f"Error creating user: {e}")
+            return False
     
     async def get_user(self, user_id: int):
-        """Get user from database or temporary storage"""
+        """Get user from database"""
         collection = self.get_collection()
-        
-        if collection is not None:
-            try:
-                user = await collection.find_one({"user_id": user_id})
-                if user:
-                    # Update last activity
-                    try:
-                        await collection.update_one(
-                            {"user_id": user_id},
-                            {"$set": {"last_activity": datetime.utcnow()}}
-                        )
-                    except:
-                        pass  # Don't fail if update fails
-                return user
-            except Exception as e:
-                logger.warning(f"Database query failed, checking temp storage: {e}")
-                # Fallback to temporary storage
-                return temp_users.get(user_id)
-        else:
-            # Use temporary storage
-            return temp_users.get(user_id)
+        if collection is None:
+            return None
+            
+        try:
+            user = await collection.find_one({"user_id": user_id})
+            if user:
+                # Update last activity
+                await collection.update_one(
+                    {"user_id": user_id},
+                    {"$set": {"last_activity": datetime.utcnow()}}
+                )
+            return user
+        except Exception as e:
+            logger.error(f"Error getting user: {e}")
+            return None
     
     async def is_user_verified(self, user_id: int):
-        """Check if user is device verified"""
+        """Check if user is device verified - STRICT CHECK"""
         user = await self.get_user(user_id)
         if not user:
             return False
-        return (user.get('device_verified', False) and 
-                user.get('device_fingerprint') is not None and
-                not user.get('is_banned', False))
+        
+        # Must have ALL conditions true
+        return (
+            user.get('device_verified', False) and 
+            user.get('device_fingerprint') is not None and
+            user.get('verification_status') == 'verified' and
+            not user.get('is_banned', False)
+        )
     
     async def generate_device_fingerprint(self, device_data: dict) -> str:
-        """Generate device fingerprint"""
+        """Generate strong device fingerprint"""
         try:
-            # Create fingerprint from device data
+            # Create comprehensive fingerprint
             components = [
                 str(device_data.get('screen_resolution', '')),
                 str(device_data.get('user_agent_hash', '')),
                 str(device_data.get('timezone_offset', '')),
                 str(device_data.get('platform', '')),
+                str(device_data.get('language', '')),
                 str(device_data.get('canvas_hash', '')),
-                str(device_data.get('hardware_concurrency', ''))
+                str(device_data.get('webgl_hash', '')),
+                str(device_data.get('hardware_concurrency', '')),
+                str(device_data.get('memory', '')),
+                str(device_data.get('pixel_ratio', ''))
             ]
-            combined = '|'.join(components)
+            
+            # Create combined fingerprint
+            combined = '|'.join(filter(None, components))
             fingerprint = hashlib.sha256(combined.encode()).hexdigest()
+            
+            logger.info(f"Generated fingerprint: {fingerprint[:16]}...")
             return fingerprint
+            
         except Exception as e:
             logger.error(f"Fingerprint generation error: {e}")
-            return hashlib.sha256(f"fallback_{datetime.utcnow().timestamp()}".encode()).hexdigest()
+            # Return error-based fingerprint
+            return hashlib.sha256(f"error_{datetime.utcnow().timestamp()}_{user_id}".encode()).hexdigest()
     
-    async def check_device_conflict(self, fingerprint: str, user_id: int) -> bool:
-        """Check if device fingerprint already exists for another user"""
+    async def check_device_already_used(self, fingerprint: str) -> dict:
+        """Check if device fingerprint is already used by ANY user"""
         device_collection = self.get_device_collection()
+        if device_collection is None:
+            return {"used": False, "reason": "database_error"}
         
-        if device_collection is not None:
-            try:
-                # Check database
-                existing_device = await device_collection.find_one({
-                    "fingerprint": fingerprint,
-                    "user_id": {"$ne": user_id}
-                })
-                return existing_device is not None
-            except Exception as e:
-                logger.warning(f"Database conflict check failed, checking temp storage: {e}")
-                # Check temporary storage
-                for temp_fingerprint, temp_data in temp_devices.items():
-                    if temp_fingerprint == fingerprint and temp_data.get('user_id') != user_id:
-                        return True
-                return False
-        else:
-            # Check temporary storage only
-            for temp_fingerprint, temp_data in temp_devices.items():
-                if temp_fingerprint == fingerprint and temp_data.get('user_id') != user_id:
-                    return True
-            return False
+        try:
+            # Check if fingerprint exists in database
+            existing_device = await device_collection.find_one({"fingerprint": fingerprint})
+            
+            if existing_device:
+                existing_user_id = existing_device.get('user_id')
+                logger.warning(f"Device already used by user: {existing_user_id}")
+                
+                return {
+                    "used": True,
+                    "existing_user_id": existing_user_id,
+                    "message": f"इस device पर पहले से user {existing_user_id} का verified account है। एक device पर केवल एक ही account allowed है।"
+                }
+            
+            return {"used": False}
+            
+        except Exception as e:
+            logger.error(f"Device check error: {e}")
+            return {"used": True, "reason": "check_error", "message": "Technical error during device check"}
     
-    async def verify_device(self, user_id: int, device_data: dict) -> dict:
-        """Complete device verification with fallback storage"""
+    async def verify_device_strict(self, user_id: int, device_data: dict) -> dict:
+        """STRICT device verification - Only allows FIRST account per device"""
         try:
             # Generate device fingerprint
             fingerprint = await self.generate_device_fingerprint(device_data)
             
-            # Check for conflicts
-            has_conflict = await self.check_device_conflict(fingerprint, user_id)
+            # Check if device is already used
+            device_check = await self.check_device_already_used(fingerprint)
             
-            if has_conflict:
+            if device_check["used"]:
+                # Device already has an account - STRICTLY REJECT
+                await self.log_security_event(user_id, "DEVICE_VERIFICATION_REJECTED", {
+                    "reason": "device_already_used",
+                    "existing_user": device_check.get("existing_user_id"),
+                    "fingerprint": fingerprint[:16] + "..."
+                })
+                
                 return {
-                    "success": False, 
-                    "message": "यह device पहले से एक verified account के साथ registered है। Multiple accounts allowed नहीं हैं।"
+                    "success": False,
+                    "message": device_check["message"]
                 }
             
-            # Store device fingerprint
+            # Device is new - ALLOW verification
+            await self.store_device_fingerprint(user_id, fingerprint, device_data)
+            await self.mark_user_verified(user_id, fingerprint)
+            
+            await self.log_security_event(user_id, "DEVICE_VERIFICATION_SUCCESS", {
+                "fingerprint": fingerprint[:16] + "...",
+                "device_data": device_data
+            })
+            
+            logger.info(f"Device successfully verified for user {user_id} - FIRST account on this device")
+            return {"success": True, "message": "Device verified successfully - आपका account अब secure है!"}
+            
+        except Exception as e:
+            logger.error(f"Device verification error: {e}")
+            await self.log_security_event(user_id, "DEVICE_VERIFICATION_ERROR", {"error": str(e)})
+            return {"success": False, "message": "Technical error occurred during verification"}
+    
+    async def store_device_fingerprint(self, user_id: int, fingerprint: str, device_data: dict):
+        """Store device fingerprint in database"""
+        device_collection = self.get_device_collection()
+        if device_collection is None:
+            return
+        
+        try:
             device_record = {
                 "user_id": user_id,
                 "fingerprint": fingerprint,
                 "device_data": device_data,
                 "created_at": datetime.utcnow(),
+                "last_used": datetime.utcnow(),
                 "is_active": True
             }
             
-            device_collection = self.get_device_collection()
-            if device_collection is not None:
-                try:
-                    await device_collection.insert_one(device_record)
-                    logger.info(f"Device fingerprint stored in database for user {user_id}")
-                except Exception as e:
-                    logger.warning(f"Database device storage failed, using temp: {e}")
-                    temp_devices[fingerprint] = device_record
-            else:
-                temp_devices[fingerprint] = device_record
-                logger.info(f"Device fingerprint stored temporarily for user {user_id}")
-            
-            # Update user verification status
-            await self.update_user_verification(user_id, fingerprint)
-            
-            logger.info(f"Device successfully verified for user {user_id}")
-            return {"success": True, "message": "Device verified successfully"}
+            await device_collection.insert_one(device_record)
+            logger.info(f"Device fingerprint stored for user {user_id}")
             
         except Exception as e:
-            logger.error(f"Device verification error: {e}")
-            return {"success": False, "message": "Verification failed due to technical error"}
+            logger.error(f"Error storing device fingerprint: {e}")
     
-    async def update_user_verification(self, user_id: int, fingerprint: str):
-        """Update user verification status"""
+    async def mark_user_verified(self, user_id: int, fingerprint: str):
+        """Mark user as device verified"""
         collection = self.get_collection()
+        if collection is None:
+            return
         
-        verification_update = {
-            "device_verified": True,
-            "device_fingerprint": fingerprint,
-            "verification_status": "verified",
-            "device_verified_at": datetime.utcnow(),
-            "risk_score": 0.1
-        }
-        
-        if collection is not None:
-            try:
-                await collection.update_one(
-                    {"user_id": user_id},
-                    {"$set": verification_update}
-                )
-                logger.info(f"User verification updated in database: {user_id}")
-            except Exception as e:
-                logger.warning(f"Database update failed, updating temp storage: {e}")
-                # Update temporary storage
-                if user_id in temp_users:
-                    temp_users[user_id].update(verification_update)
-        else:
-            # Update temporary storage
-            if user_id in temp_users:
-                temp_users[user_id].update(verification_update)
-                logger.info(f"User verification updated in temp storage: {user_id}")
+        try:
+            verification_update = {
+                "device_verified": True,
+                "device_fingerprint": fingerprint,
+                "verification_status": "verified",
+                "device_verified_at": datetime.utcnow()
+            }
+            
+            await collection.update_one(
+                {"user_id": user_id},
+                {"$set": verification_update}
+            )
+            
+            logger.info(f"User marked as verified: {user_id}")
+            
+        except Exception as e:
+            logger.error(f"Error marking user verified: {e}")
     
     async def add_to_wallet(self, user_id: int, amount: float, transaction_type: str, description: str):
-        """Add money to user wallet"""
-        user = await self.get_user(user_id)
-        if not user or user.get('is_banned', False):
+        """Add money to user wallet - Only for verified users"""
+        if not await self.is_user_verified(user_id):
+            logger.warning(f"Wallet operation rejected - User {user_id} not verified")
+            return False
+        
+        collection = self.get_collection()
+        if collection is None:
             return False
         
         try:
+            user = await self.get_user(user_id)
+            if not user or user.get('is_banned', False):
+                return False
+            
             new_balance = user.get("wallet_balance", 0) + amount
             total_earned = user.get("total_earned", 0)
             
             if amount > 0:
                 total_earned += amount
             
-            # Update user wallet
             wallet_update = {
                 "wallet_balance": new_balance,
                 "total_earned": total_earned,
                 "updated_at": datetime.utcnow()
             }
             
-            # Update specific fields based on transaction type
             if transaction_type == "referral":
                 wallet_update["referral_earnings"] = user.get("referral_earnings", 0) + amount
                 wallet_update["total_referrals"] = user.get("total_referrals", 0) + 1
             
-            collection = self.get_collection()
-            if collection is not None:
-                try:
-                    await collection.update_one(
-                        {"user_id": user_id},
-                        {"$set": wallet_update}
-                    )
-                    logger.info(f"Wallet updated in database for user {user_id}: {amount:+.2f}")
-                except Exception as e:
-                    logger.warning(f"Database wallet update failed: {e}")
-                    # Update temporary storage
-                    if user_id in temp_users:
-                        temp_users[user_id].update(wallet_update)
-            else:
-                # Update temporary storage
-                if user_id in temp_users:
-                    temp_users[user_id].update(wallet_update)
-                    logger.info(f"Wallet updated in temp storage for user {user_id}: {amount:+.2f}")
+            await collection.update_one(
+                {"user_id": user_id},
+                {"$set": wallet_update}
+            )
             
+            logger.info(f"Wallet updated for verified user {user_id}: {amount:+.2f}")
             return True
+            
         except Exception as e:
             logger.error(f"Error adding to wallet: {e}")
             return False
     
+    async def log_security_event(self, user_id: int, event_type: str, details: dict):
+        """Log security events"""
+        security_logs = self.get_security_logs_collection()
+        if security_logs is None:
+            return
+        
+        try:
+            log_entry = {
+                "user_id": user_id,
+                "event_type": event_type,
+                "details": details,
+                "timestamp": datetime.utcnow()
+            }
+            await security_logs.insert_one(log_entry)
+        except Exception as e:
+            logger.error(f"Security logging error: {e}")
+    
     async def get_user_stats(self) -> dict:
-        """Get basic user statistics"""
+        """Get user statistics"""
         stats = {
             "total_users": 0,
             "verified_users": 0,
             "pending_verification": 0,
-            "temp_storage_users": len(temp_users)
+            "unique_devices": 0,
+            "rejected_verifications": 0
         }
         
         collection = self.get_collection()
-        if collection is not None:
-            try:
-                stats["total_users"] = await collection.count_documents({})
-                stats["verified_users"] = await collection.count_documents({"device_verified": True})
-                stats["pending_verification"] = stats["total_users"] - stats["verified_users"]
-            except Exception as e:
-                logger.warning(f"Stats query failed: {e}")
-                # Count from temporary storage
-                stats["total_users"] = len(temp_users)
-                stats["verified_users"] = len([u for u in temp_users.values() if u.get('device_verified')])
-                stats["pending_verification"] = stats["total_users"] - stats["verified_users"]
-        else:
-            # Use temporary storage stats
-            stats["total_users"] = len(temp_users)
-            stats["verified_users"] = len([u for u in temp_users.values() if u.get('device_verified')])
+        device_collection = self.get_device_collection()
+        security_logs = self.get_security_logs_collection()
+        
+        if collection is None:
+            return stats
+        
+        try:
+            stats["total_users"] = await collection.count_documents({})
+            stats["verified_users"] = await collection.count_documents({"device_verified": True})
             stats["pending_verification"] = stats["total_users"] - stats["verified_users"]
+            
+            if device_collection is not None:
+                stats["unique_devices"] = await device_collection.count_documents({})
+            
+            if security_logs is not None:
+                stats["rejected_verifications"] = await security_logs.count_documents({
+                    "event_type": "DEVICE_VERIFICATION_REJECTED"
+                })
+            
+        except Exception as e:
+            logger.error(f"Stats calculation error: {e}")
         
         return stats
 
 # Initialize user model
 user_model = UserModel()
 
-# Enhanced Telegram Bot
+# Enhanced Telegram Bot with Strict Verification
 class WalletBot:
     def __init__(self):
         self.bot = None
@@ -408,14 +458,13 @@ class WalletBot:
             self.application = ApplicationBuilder().token(BOT_TOKEN).build()
             self.setup_handlers()
             self.initialized = True
-            logger.info("Enhanced Telegram bot initialized successfully")
+            logger.info("Strict verification bot initialized")
         except Exception as e:
             logger.error(f"Bot initialization error: {e}")
             self.initialized = False
     
     def setup_handlers(self):
         try:
-            # Command handlers
             self.application.add_handler(CommandHandler("start", self.start_command))
             self.application.add_handler(CommandHandler("wallet", self.wallet_command))
             self.application.add_handler(CommandHandler("help", self.help_command))
@@ -423,13 +472,8 @@ class WalletBot:
             self.application.add_handler(CommandHandler("device_verified", self.device_verified_callback))
             self.application.add_handler(CommandHandler("admin", self.admin_command))
             
-            # Callback handlers
             self.application.add_handler(CallbackQueryHandler(self.button_handler))
-            
-            # Message handlers
             self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
-            
-            # Error handler
             self.application.add_error_handler(self.error_handler)
             
             logger.info("All bot handlers setup complete")
@@ -437,21 +481,9 @@ class WalletBot:
             logger.error(f"Handler setup error: {e}")
     
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Enhanced error handler"""
         logger.error("Exception while handling an update:", exc_info=context.error)
-        
-        try:
-            if update and hasattr(update, 'effective_user'):
-                await context.bot.send_message(
-                    update.effective_user.id,
-                    f"{EMOJI['cross']} An error occurred. Please try again.",
-                    reply_markup=self.get_reply_keyboard()
-                )
-        except:
-            pass
     
     def get_reply_keyboard(self):
-        """Get main reply keyboard"""
         keyboard = [
             [KeyboardButton(f"{EMOJI['wallet']} My Wallet"), KeyboardButton(f"{EMOJI['chart']} Campaigns")],
             [KeyboardButton(f"{EMOJI['star']} Referral"), KeyboardButton(f"{EMOJI['gear']} Withdraw")],
@@ -478,7 +510,7 @@ class WalletBot:
                     except ValueError:
                         pass
             
-            # Create user
+            # Create user (ALWAYS UNVERIFIED initially)
             user_data = {
                 "user_id": user_id,
                 "username": username,
@@ -490,14 +522,16 @@ class WalletBot:
             
             await user_model.create_user(user_data)
             
-            # Check verification status
+            # ALWAYS require verification - even for existing users
+            # Check current verification status
             is_verified = await user_model.is_user_verified(user_id)
             
             if not is_verified:
+                # Show verification requirement - EVERY TIME
                 await self.require_device_verification(user_id, first_name, update)
             else:
+                # User is already verified, show welcome
                 await self.send_verified_welcome(update, first_name)
-                # Process referral bonus if applicable
                 if referrer_id:
                     await self.process_referral_bonus(user_id, referrer_id)
                     
@@ -506,129 +540,112 @@ class WalletBot:
             await update.message.reply_text(f"{EMOJI['cross']} Error occurred. Please try again.")
     
     async def require_device_verification(self, user_id: int, first_name: str, update: Update):
-        """Send device verification requirement"""
+        """ALWAYS require device verification"""
         verification_url = f"{RENDER_EXTERNAL_URL}/verify?user_id={user_id}"
         
-        verification_msg = f"""{EMOJI['lock']} **Enhanced Security Verification**
+        verification_msg = f"""{EMOJI['lock']} **Strict Device Verification Required**
 
-Welcome {first_name}! 
+Hello {first_name}! 
 
-**One Device, One Account Policy:**
-{EMOJI['shield']} Advanced device fingerprinting enabled
-{EMOJI['cross']} Multiple account creation prevented
-{EMOJI['fire']} Enhanced fraud protection active
+{EMOJI['shield']} **ENHANCED SECURITY POLICY:**
+{EMOJI['cross']} केवल एक device पर एक account allowed है
+{EMOJI['fire']} Multiple accounts strictly prohibited
+{EMOJI['key']} Advanced fingerprinting technology
 
-**Security Benefits:**
-{EMOJI['check']} Account protection guaranteed
-{EMOJI['star']} Fair usage for all users  
-{EMOJI['wallet']} Secure wallet operations
+{EMOJI['warning']} **Important Notice:**
+• यदि आपका कोई दूसरा account इस device पर verified है तो यह account reject हो जाएगा
+• First account on device को ही verification मिलेगा
+• यह policy fraud prevention के लिए है
 
-Click below to verify your device:"""
+{EMOJI['rocket']} **Click below to verify:**"""
         
         keyboard = [
-            [InlineKeyboardButton(f"{EMOJI['lock']} Verify My Device", web_app=WebAppInfo(url=verification_url))]
+            [InlineKeyboardButton(f"{EMOJI['lock']} Verify This Device", web_app=WebAppInfo(url=verification_url))]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(verification_msg, reply_markup=reply_markup, parse_mode="Markdown")
     
     async def send_verified_welcome(self, update: Update, first_name: str):
-        """Send welcome message for verified users"""
-        welcome_msg = f"""{EMOJI['rocket']} **Welcome to Enhanced Wallet Bot!**
+        welcome_msg = f"""{EMOJI['rocket']} **Device Successfully Verified!**
 
-Hi {first_name}! Your device is verified {EMOJI['check']}
+Welcome {first_name}! {EMOJI['check']}
 
-**Available Features:**
-{EMOJI['wallet']} **Secure Wallet Management**
-{EMOJI['chart']} **Campaign Participation** (Coming Soon)
-{EMOJI['star']} **Referral System** - Earn Rs.10 per friend
-{EMOJI['gear']} **Withdrawal System** (Coming Soon)
+{EMOJI['shield']} **Your Account Status:**
+• Device Verification: {EMOJI['check']} Completed
+• Account Security: {EMOJI['check']} Maximum
+• Unique Device Policy: {EMOJI['check']} Enforced
 
-**Your Account Status:**
-{EMOJI['lock']} Device Verified & Secure
-{EMOJI['fire']} Full Access Granted
-{EMOJI['rocket']} All Features Unlocked
+{EMOJI['wallet']} **Available Features:**
+• Secure wallet management
+• Referral system - Rs.10 per friend
+• Campaign participation (coming soon)
+• Safe withdrawals (coming soon)
 
-Choose an option below to get started:"""
+Choose an option below:"""
         
         keyboard = [
             [InlineKeyboardButton(f"{EMOJI['wallet']} My Wallet", callback_data="wallet")],
-            [InlineKeyboardButton(f"{EMOJI['star']} Referral", callback_data="referral")],
-            [InlineKeyboardButton(f"{EMOJI['shield']} Status", callback_data="status")]
+            [InlineKeyboardButton(f"{EMOJI['star']} Referral", callback_data="referral")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(welcome_msg, reply_markup=reply_markup, parse_mode="Markdown")
-        await update.message.reply_text(f"{EMOJI['rocket']} **Quick Access Menu:**", reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
+        await update.message.reply_text(f"{EMOJI['rocket']} **Quick Menu:**", reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
     
     async def device_verified_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle successful device verification"""
         user_id = update.effective_user.id
         first_name = update.effective_user.first_name or "User"
         
         await update.message.reply_text(
-            f"{EMOJI['check']} **Device Verified Successfully!**\n\nYour account is now fully secured!\n\n{EMOJI['rocket']} All features are now unlocked!",
+            f"{EMOJI['check']} **Device Verification Successful!**\n\nYour account is now the ONLY verified account on this device!\n\n{EMOJI['shield']} Enhanced security active!",
             parse_mode='Markdown'
         )
         
         await self.send_verified_welcome(update, first_name)
         
-        # Check for pending referral bonus
+        # Process referral bonus
         user = await user_model.get_user(user_id)
         if user and user.get("referred_by") and not user.get("referral_bonus_claimed", False):
             await self.process_referral_bonus(user_id, user["referred_by"])
     
     async def process_referral_bonus(self, user_id: int, referrer_id: int):
-        """Process referral bonus for both users"""
         try:
-            referrer = await user_model.get_user(referrer_id)
-            if not referrer or not referrer.get('device_verified'):
+            # Both users must be verified for referral bonus
+            if not await user_model.is_user_verified(user_id) or not await user_model.is_user_verified(referrer_id):
+                logger.info(f"Referral bonus skipped - users not verified: {referrer_id} -> {user_id}")
                 return
             
-            # Give bonus to both users
             referral_bonus = 10.0
             
-            # Add bonus to new user
-            await user_model.add_to_wallet(
-                user_id, 
-                referral_bonus, 
-                "referral", 
-                f"Welcome bonus via referral from user {referrer_id}"
-            )
-            
-            # Add bonus to referrer
-            await user_model.add_to_wallet(
-                referrer_id,
-                referral_bonus,
-                "referral",
-                f"Referral bonus from new user {user_id}"
-            )
+            # Add bonus to both users
+            await user_model.add_to_wallet(user_id, referral_bonus, "referral", f"Welcome bonus from referral")
+            await user_model.add_to_wallet(referrer_id, referral_bonus, "referral", f"Referral bonus from user {user_id}")
             
             # Send notifications
             await self.bot.send_message(
                 user_id,
-                f"{EMOJI['rocket']} **Referral Bonus Received!**\n\nYou got Rs.{referral_bonus:.2f} for joining via referral link!",
+                f"{EMOJI['rocket']} **Referral Bonus!** Rs.{referral_bonus:.2f} added to your verified account!",
                 parse_mode="Markdown"
             )
             
             await self.bot.send_message(
                 referrer_id,
-                f"{EMOJI['rocket']} **Referral Success!**\n\nSomeone used your referral link! You earned Rs.{referral_bonus:.2f} bonus!",
+                f"{EMOJI['rocket']} **Referral Success!** Rs.{referral_bonus:.2f} earned from verified referral!",
                 parse_mode="Markdown"
             )
             
-            logger.info(f"Referral bonus processed: {referrer_id} -> {user_id}")
+            logger.info(f"Referral bonus processed for verified users: {referrer_id} -> {user_id}")
             
         except Exception as e:
-            logger.error(f"Referral bonus processing error: {e}")
+            logger.error(f"Referral bonus error: {e}")
     
     async def wallet_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Enhanced wallet command"""
         user_id = update.effective_user.id
         
-        # Check verification
+        # STRICT verification check
         if not await user_model.is_user_verified(user_id):
-            await update.message.reply_text(f"{EMOJI['lock']} Device verification required. Please /start to verify your device.")
+            await update.message.reply_text(f"{EMOJI['lock']} Device verification required. Please /start to verify.")
             return
         
         user = await user_model.get_user(user_id)
@@ -636,26 +653,23 @@ Choose an option below to get started:"""
             await update.message.reply_text(f"{EMOJI['cross']} User not found.")
             return
         
-        wallet_msg = f"""{EMOJI['wallet']} **Your Secure Wallet**
+        wallet_msg = f"""{EMOJI['wallet']} **Your Verified Wallet**
 
 {EMOJI['star']} **User:** {user.get('first_name', 'Unknown')}
 {EMOJI['key']} **User ID:** `{user_id}`
-{EMOJI['wallet']} **Current Balance:** Rs.{user.get('wallet_balance', 0):.2f}
+{EMOJI['wallet']} **Balance:** Rs.{user.get('wallet_balance', 0):.2f}
 
-**{EMOJI['chart']} Earnings Breakdown:**
+{EMOJI['chart']} **Earnings:**
 • Total Earned: Rs.{user.get('total_earned', 0):.2f}
 • Referral Earnings: Rs.{user.get('referral_earnings', 0):.2f}
-
-**{EMOJI['fire']} Activity Stats:**
 • Total Referrals: {user.get('total_referrals', 0)}
-• Member Since: {user.get('created_at', datetime.utcnow()).strftime('%Y-%m-%d')}
 
-**{EMOJI['lock']} Security Status:**
-• Device: {EMOJI['check']} Verified & Secure
-• Account: {EMOJI['check']} Active"""
+{EMOJI['shield']} **Security Status:**
+• Device: {EMOJI['check']} Only Verified Account on Device
+• Security: {EMOJI['check']} Maximum Protection
+• Account: {EMOJI['check']} Fully Active"""
         
         keyboard = [
-            [InlineKeyboardButton(f"{EMOJI['gear']} Withdraw", callback_data="withdraw")],
             [InlineKeyboardButton(f"{EMOJI['star']} Referral", callback_data="referral")],
             [InlineKeyboardButton(f"{EMOJI['rocket']} Refresh", callback_data="wallet")]
         ]
@@ -667,286 +681,203 @@ Choose an option below to get started:"""
             await update.message.reply_text(wallet_msg, reply_markup=reply_markup, parse_mode="Markdown")
     
     async def referral_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Enhanced referral command"""
         user_id = update.effective_user.id
         
         if not await user_model.is_user_verified(user_id):
-            await update.message.reply_text(f"{EMOJI['lock']} Device verification required for referral system.")
+            await update.message.reply_text(f"{EMOJI['lock']} Device verification required.")
             return
         
         user = await user_model.get_user(user_id)
-        if not user:
-            return
-        
         bot_username = (await self.bot.get_me()).username
         referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
         
-        referral_msg = f"""{EMOJI['star']} **Enhanced Referral Program**
+        referral_msg = f"""{EMOJI['star']} **Verified Account Referral Program**
 
-**{EMOJI['rocket']} Earn Rs.10 for each verified friend!**
+{EMOJI['rocket']} **Earn Rs.10 for each verified friend!**
 
-**Your Referral Stats:**
-• Total Referrals: {user.get('total_referrals', 0)}
+{EMOJI['chart']} **Your Stats:**
+• Verified Referrals: {user.get('total_referrals', 0)}
 • Referral Earnings: Rs.{user.get('referral_earnings', 0):.2f}
 
-**{EMOJI['key']} Your Personal Referral Link:**
-`{referral_link}`
+{EMOJI['key']} **Your Link:** `{referral_link}`
 
-**{EMOJI['fire']} How it Works:**
-1. Share your unique referral link
-2. Friends join and verify their device
-3. Both of you get Rs.10 instantly!
-
-**{EMOJI['shield']} Security Features:**
-• Only device-verified users get rewards
-• Advanced fraud prevention active"""
+{EMOJI['shield']} **Requirements:**
+• Friends must complete device verification
+• Only one account per device allowed
+• Both users get Rs.10 bonus"""
         
         keyboard = [
-            [InlineKeyboardButton(f"{EMOJI['rocket']} Share Link", url=f"https://t.me/share/url?url={referral_link}")],
-            [InlineKeyboardButton(f"{EMOJI['chart']} Refresh", callback_data="referral")]
+            [InlineKeyboardButton(f"{EMOJI['rocket']} Share Link", url=f"https://t.me/share/url?url={referral_link}")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(referral_msg, reply_markup=reply_markup, parse_mode="Markdown")
     
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Enhanced help command"""
-        help_msg = f"""{EMOJI['bell']} **Enhanced Bot Help & Guide**
+        help_msg = f"""{EMOJI['bell']} **Strict Security Bot Help**
 
-**{EMOJI['gear']} Available Commands:**
-• /start - Main menu with device verification
-• /wallet - Detailed wallet information  
-• /referral - Complete referral program
-• /help - Show this help
+{EMOJI['gear']} **Commands:**
+• /start - Device verification (required every time)
+• /wallet - Wallet access (verified users only)
+• /referral - Referral program
+• /help - This help
 
-**{EMOJI['lock']} Security Features:**
-• Advanced device fingerprinting
-• One device = One account policy
-• Real-time fraud detection
+{EMOJI['lock']} **Security Policy:**
+• ONE device = ONE account ONLY
+• Multiple accounts = Automatic rejection
+• Device verification mandatory
+• No exceptions to security rules
 
-**{EMOJI['wallet']} Earning Opportunities:**
-• **Referral System:** Rs.10 per verified friend
-• **Campaigns:** Coming soon
-
-**{EMOJI['bell']} Need Help?**
-Contact our support team for assistance."""
+{EMOJI['shield']} **This ensures:**
+• Fair usage for everyone
+• No fraud or abuse
+• Secure transactions
+• Reliable platform"""
         
         await update.message.reply_text(help_msg, reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
     
     async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Admin command for authorized users"""
         user_id = update.effective_user.id
-        
         if user_id != ADMIN_CHAT_ID:
-            await update.message.reply_text(f"{EMOJI['cross']} Unauthorized access.")
+            await update.message.reply_text(f"{EMOJI['cross']} Unauthorized.")
             return
         
         stats = await user_model.get_user_stats()
         
-        admin_msg = f"""{EMOJI['gear']} **Admin Control Panel**
+        admin_msg = f"""{EMOJI['gear']} **Strict Security Admin Panel**
 
-**{EMOJI['chart']} System Statistics:**
+{EMOJI['chart']} **Statistics:**
 • Total Users: {stats['total_users']}
 • Verified Users: {stats['verified_users']}
 • Pending Verification: {stats['pending_verification']}
-• Temp Storage Users: {stats['temp_storage_users']}
+• Unique Devices: {stats['unique_devices']}
+• Rejected Verifications: {stats['rejected_verifications']}
 
-**{EMOJI['shield']} Database Status:**
-• MongoDB: {'Connected' if db_connected else 'Using Temp Storage'}
-• System: {EMOJI['check']} Operational"""
+{EMOJI['shield']} **Policy Enforcement:**
+• One Device One Account: {EMOJI['check']} ACTIVE
+• Database: Cleaned and Fresh
+• Security: Maximum Level"""
         
         await update.message.reply_text(admin_msg, parse_mode="Markdown")
     
     async def button_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Enhanced button handler"""
         query = update.callback_query
         await query.answer()
         
         user_id = update.effective_user.id
         data = query.data
         
-        # Check verification for most actions
+        # STRICT verification required for ALL buttons
         if not await user_model.is_user_verified(user_id):
-            await query.edit_message_text(f"{EMOJI['lock']} Device verification required. Please /start to verify your device first.")
+            await query.edit_message_text(f"{EMOJI['lock']} Device verification required. /start to verify.")
             return
         
         if data == "wallet":
             await self.wallet_command(update, context)
         elif data == "referral":
-            await self.show_referral_details(update, context)
-        elif data == "withdraw":
-            withdraw_msg = f"{EMOJI['gear']} **Withdrawal System** (Coming Soon)\n\nAdvanced withdrawal system with multiple payment methods is under development."
-            await query.edit_message_text(withdraw_msg, parse_mode="Markdown")
-        else:
-            await query.answer(f"{EMOJI['warning']} Unknown action.")
-    
-    async def show_referral_details(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Show detailed referral information"""
-        user_id = update.effective_user.id
-        user = await user_model.get_user(user_id)
-        
-        if not user:
-            return
-        
-        bot_username = (await self.bot.get_me()).username
-        referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
-        
-        referral_details = f"""{EMOJI['star']} **Your Referral Dashboard**
-
-**{EMOJI['chart']} Current Performance:**
-• Active Referrals: {user.get('total_referrals', 0)}
-• Total Earnings: Rs.{user.get('referral_earnings', 0):.2f}
-
-**{EMOJI['key']} Your Unique Link:**
-`{referral_link}`
-
-**{EMOJI['rocket']} Earning Potential:**
-• 10 Referrals = Rs.100
-• 50 Referrals = Rs.500  
-• 100 Referrals = Rs.1,000"""
-        
-        keyboard = [
-            [InlineKeyboardButton(f"{EMOJI['rocket']} Share Link", url=f"https://t.me/share/url?url={referral_link}")],
-            [InlineKeyboardButton(f"{EMOJI['chart']} Refresh", callback_data="referral")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.callback_query.edit_message_text(referral_details, reply_markup=reply_markup, parse_mode="Markdown")
+            await self.referral_command(update, context)
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Enhanced message handler"""
         text = update.message.text
         user_id = update.effective_user.id
         
-        # Check verification for feature access
-        verification_required_texts = [
-            f"{EMOJI['wallet']} My Wallet", f"{EMOJI['chart']} Campaigns", 
-            f"{EMOJI['star']} Referral", f"{EMOJI['gear']} Withdraw"
-        ]
-        
-        if text in verification_required_texts:
+        # ALL menu functions require verification
+        if text in [f"{EMOJI['wallet']} My Wallet", f"{EMOJI['star']} Referral", f"{EMOJI['chart']} Campaigns", f"{EMOJI['gear']} Withdraw"]:
             if not await user_model.is_user_verified(user_id):
-                await update.message.reply_text(
-                    f"{EMOJI['lock']} Device verification required. Please /start to verify your device.",
-                    reply_markup=self.get_reply_keyboard()
-                )
+                await update.message.reply_text(f"{EMOJI['lock']} Device verification required. Use /start", reply_markup=self.get_reply_keyboard())
                 return
         
-        # Handle menu button messages
         if text == f"{EMOJI['wallet']} My Wallet":
             await self.wallet_command(update, context)
         elif text == f"{EMOJI['star']} Referral":
             await self.referral_command(update, context)
         elif text == f"{EMOJI['bell']} Help":
             await self.help_command(update, context)
-        elif text == f"{EMOJI['shield']} Status":
-            await self.show_status(update, context)
         else:
-            welcome_msg = f"""{EMOJI['star']} **Hi there!**
-
-{EMOJI['rocket']} **Enhanced Wallet Bot** with advanced security
-{EMOJI['lock']} **Device fingerprinting** protection active
-
-**Current Status:**
-• {EMOJI['check'] if await user_model.is_user_verified(user_id) else EMOJI['warning']} {'Device Verified' if await user_model.is_user_verified(user_id) else 'Verification Pending'}
-
-Use the menu buttons below for navigation."""
-            
-            await update.message.reply_text(welcome_msg, reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
-    
-    async def show_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Show system status"""
-        user_id = update.effective_user.id
-        user = await user_model.get_user(user_id)
-        
-        status_msg = f"""{EMOJI['shield']} **System Status**
-
-**{EMOJI['gear']} System:**
-• Status: {EMOJI['check']} Running
-• Database: {EMOJI['check'] if db_connected else EMOJI['warning']} {'MongoDB Connected' if db_connected else 'Temp Storage Active'}
-
-**{EMOJI['star']} Your Account:**
-• Verification: {EMOJI['check'] if await user_model.is_user_verified(user_id) else EMOJI['warning']} {'Verified' if await user_model.is_user_verified(user_id) else 'Pending'}
-• Member Since: {user.get('created_at', datetime.utcnow()).strftime('%Y-%m-%d') if user else 'Today'}
-
-**{EMOJI['lock']} Security:**
-• Device fingerprinting: {EMOJI['check']} Active
-• Fraud prevention: {EMOJI['check']} Enabled"""
-        
-        await update.message.reply_text(status_msg, reply_markup=self.get_reply_keyboard(), parse_mode="Markdown")
+            await update.message.reply_text(f"{EMOJI['warning']} Please use /start for device verification first.", reply_markup=self.get_reply_keyboard())
 
 # Initialize bot
 wallet_bot = None
 
-# Device Verification API
+# Device Verification API - STRICT
 @app.post("/api/verify-device")
 async def verify_device(request: Request):
-    """Complete device verification API"""
     try:
         data = await request.json()
         user_id = int(data.get('user_id'))
         device_data = data.get('device_data', {})
         
-        logger.info(f"Device verification request from user {user_id}")
+        logger.info(f"STRICT device verification request from user {user_id}")
         
-        # Enhanced device verification
-        verification_result = await user_model.verify_device(user_id, device_data)
+        # Strict verification
+        verification_result = await user_model.verify_device_strict(user_id, device_data)
         
         if verification_result["success"]:
             try:
                 await wallet_bot.bot.send_message(user_id, "/device_verified")
-                logger.info(f"Device verification successful for user {user_id}")
+                logger.info(f"Device verification SUCCESS for user {user_id}")
             except Exception as bot_error:
                 logger.error(f"Bot callback error: {bot_error}")
         else:
-            logger.warning(f"Device verification failed for user {user_id}: {verification_result['message']}")
+            logger.warning(f"Device verification REJECTED for user {user_id}: {verification_result['message']}")
             
         return verification_result
             
     except Exception as e:
         logger.error(f"Device verification API error: {e}")
-        return {"success": False, "message": "Technical error during verification"}
+        return {"success": False, "message": "Technical error occurred"}
 
-# Enhanced Device Verification WebApp
+# Enhanced Verification Page
 @app.get("/verify")
 async def verification_page(user_id: int):
-    """Complete device verification page"""
     html_content = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Device Verification</title>
+    <title>Strict Device Verification</title>
     <style>
         body {{ 
             font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
             padding: 20px; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); 
             min-height: 100vh; 
             margin: 0; 
         }}
         .container {{ 
-            max-width: 400px; 
+            max-width: 450px; 
             margin: 0 auto; 
             background: white; 
             padding: 30px; 
             border-radius: 15px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3); 
             text-align: center; 
+            border: 2px solid #ff6b6b;
         }}
-        .icon {{ font-size: 3rem; margin-bottom: 15px; }}
-        h2 {{ color: #333; margin-bottom: 10px; }}
-        p {{ color: #666; margin-bottom: 20px; line-height: 1.5; }}
+        .icon {{ font-size: 4rem; margin-bottom: 15px; color: #ff6b6b; }}
+        h2 {{ color: #333; margin-bottom: 15px; font-weight: 700; }}
+        .warning-box {{ 
+            background: linear-gradient(135deg, #fff3cd, #ffeaa7); 
+            border: 2px solid #ff6b6b; 
+            padding: 20px; 
+            border-radius: 10px; 
+            margin: 20px 0; 
+            text-align: left;
+        }}
+        .warning-box h3 {{ color: #d63031; margin-bottom: 10px; }}
+        .warning-box ul {{ padding-left: 20px; color: #2d3436; }}
+        .warning-box li {{ margin: 8px 0; font-weight: 500; }}
         .btn {{ 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); 
             color: white; 
             padding: 15px 30px; 
             border: none; 
             border-radius: 8px; 
             cursor: pointer; 
             font-size: 16px; 
-            font-weight: 600;
+            font-weight: 700;
+            text-transform: uppercase;
         }}
         .btn:disabled {{ opacity: 0.6; cursor: not-allowed; }}
         .status {{ 
@@ -956,8 +887,8 @@ async def verification_page(user_id: int):
             font-weight: bold; 
         }}
         .loading {{ background: #e3f2fd; color: #1976d2; }}
-        .success {{ background: #e8f5e8; color: #2e7d32; }}
-        .error {{ background: #ffebee; color: #c62828; }}
+        .success {{ background: #d4edda; color: #155724; }}
+        .error {{ background: #f8d7da; color: #721c24; }}
         .progress {{ 
             width: 100%; 
             height: 6px; 
@@ -968,36 +899,25 @@ async def verification_page(user_id: int):
         }}
         .progress-bar {{ 
             height: 100%; 
-            background: linear-gradient(90deg, #667eea, #764ba2); 
+            background: linear-gradient(90deg, #ff6b6b, #ee5a24); 
             width: 0%; 
             transition: width 0.4s; 
         }}
-        .security-info {{
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-            text-align: left;
-        }}
-        .security-info h3 {{ color: #333; margin-bottom: 10px; }}
-        .security-info ul {{ padding-left: 20px; }}
-        .security-info li {{ margin: 5px 0; color: #666; }}
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="icon">🔐</div>
-        <h2>Enhanced Device Verification</h2>
-        <p>Secure your account with advanced device fingerprinting technology</p>
+        <div class="icon">⚠️</div>
+        <h2>STRICT Device Verification</h2>
         
-        <div class="security-info">
-            <h3>🛡️ Security Features</h3>
+        <div class="warning-box">
+            <h3>🚨 IMPORTANT WARNING</h3>
             <ul>
-                <li>✅ Advanced device fingerprinting</li>
-                <li>🔒 One device per account policy</li>
-                <li>🚫 Multiple account prevention</li>
-                <li>⚡ Real-time fraud detection</li>
-                <li>🎯 Enhanced security monitoring</li>
+                <li><strong>केवल एक device पर एक account allowed है!</strong></li>
+                <li>यदि इस device पर पहले से कोई account verified है तो यह REJECT हो जाएगा</li>
+                <li>First account को ही verification मिलेगी</li>
+                <li>यह policy strictly enforced है - कोई exception नहीं</li>
+                <li>Fraud prevention के लिए यह जरूरी है</li>
             </ul>
         </div>
         
@@ -1005,15 +925,14 @@ async def verification_page(user_id: int):
             <div class="progress-bar" id="progressBar"></div>
         </div>
         
-        <div id="status" class="status loading">Ready to verify your device...</div>
+        <div id="status" class="status loading">Ready for strict verification...</div>
         
-        <button id="verifyBtn" class="btn" onclick="verifyDevice()">🔍 Verify Device</button>
+        <button id="verifyBtn" class="btn" onclick="verifyDevice()">⚠️ Proceed with Verification</button>
     </div>
 
     <script>
         const USER_ID = {user_id};
         let deviceData = {{}};
-        let verificationStarted = false;
         
         function collectDeviceData() {{
             deviceData = {{
@@ -1026,6 +945,7 @@ async def verification_page(user_id: int):
                 webgl_hash: generateWebGLHash(),
                 hardware_concurrency: navigator.hardwareConcurrency || 0,
                 memory: navigator.deviceMemory || 0,
+                pixel_ratio: window.devicePixelRatio || 1,
                 timestamp: Date.now()
             }};
         }}
@@ -1035,16 +955,16 @@ async def verification_page(user_id: int):
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 ctx.textBaseline = 'top';
-                ctx.font = '14px Arial';
-                ctx.fillStyle = '#f60';
-                ctx.fillRect(125, 1, 62, 20);
-                ctx.fillStyle = '#069';
-                ctx.fillText('Enhanced Device Security Check', 2, 15);
-                ctx.fillStyle = 'rgba(102, 204, 0, 0.2)';
-                ctx.fillText('One Device One Account Policy', 4, 45);
-                return btoa(canvas.toDataURL()).slice(-32);
+                ctx.font = 'bold 16px Arial';
+                ctx.fillStyle = '#ff6b6b';
+                ctx.fillRect(10, 10, 150, 30);
+                ctx.fillStyle = '#fff';
+                ctx.fillText('STRICT DEVICE CHECK', 15, 25);
+                ctx.fillStyle = '#2d3436';
+                ctx.fillText('One Device One Account', 10, 60);
+                return btoa(canvas.toDataURL()).slice(-40);
             }} catch (e) {{
-                return 'canvas_error_' + Date.now();
+                return 'canvas_strict_' + Date.now();
             }}
         }}
         
@@ -1056,9 +976,10 @@ async def verification_page(user_id: int):
                 
                 const renderer = gl.getParameter(gl.RENDERER);
                 const vendor = gl.getParameter(gl.VENDOR);
-                return btoa(renderer + '|' + vendor).slice(-20);
+                const version = gl.getParameter(gl.VERSION);
+                return btoa(renderer + '|' + vendor + '|' + version).slice(-30);
             }} catch (e) {{
-                return 'webgl_error_' + Date.now();
+                return 'webgl_strict_' + Date.now();
             }}
         }}
         
@@ -1068,17 +989,14 @@ async def verification_page(user_id: int):
         }}
         
         async function verifyDevice() {{
-            if (verificationStarted) return;
-            verificationStarted = true;
-            
-            updateProgress(10, '🔄 Starting device analysis...');
+            updateProgress(20, '🔍 Collecting comprehensive device data...');
             document.getElementById('verifyBtn').disabled = true;
             
             collectDeviceData();
-            updateProgress(40, '🔍 Generating security fingerprint...');
+            updateProgress(50, '🔐 Generating unique device fingerprint...');
             
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            updateProgress(70, '🔐 Verifying device uniqueness...');
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            updateProgress(80, '⚠️ Checking device against existing accounts...');
             
             try {{
                 const response = await fetch('/api/verify-device', {{
@@ -1088,41 +1006,30 @@ async def verification_page(user_id: int):
                 }});
                 
                 const result = await response.json();
-                updateProgress(100, '✅ Verification complete!');
+                updateProgress(100, '✅ Verification process complete!');
                 
                 if (result.success) {{
-                    document.getElementById('status').innerHTML = '🎉 Device verified successfully!<br><small>You can now close this page and return to Telegram.</small>';
+                    document.getElementById('status').innerHTML = '🎉 SUCCESS! आपका device verify हो गया है!<br><small>आप अब इस device पर ONLY VERIFIED account हैं।</small>';
                     document.getElementById('status').className = 'status success';
                     
                     setTimeout(() => {{
                         if (window.Telegram && window.Telegram.WebApp) {{
                             window.Telegram.WebApp.close();
-                        }} else {{
-                            window.close();
                         }}
                     }}, 3000);
                 }} else {{
-                    document.getElementById('status').innerHTML = '❌ ' + result.message;
+                    document.getElementById('status').innerHTML = '❌ REJECTED: ' + result.message + '<br><small>इस device पर पहले से एक verified account है।</small>';
                     document.getElementById('status').className = 'status error';
-                    document.getElementById('verifyBtn').innerHTML = '🔄 Try Again';
-                    document.getElementById('verifyBtn').disabled = false;
-                    verificationStarted = false;
+                    document.getElementById('verifyBtn').innerHTML = '❌ Verification Failed';
+                    document.getElementById('verifyBtn').disabled = true;
                 }}
             }} catch (error) {{
-                console.error('Verification error:', error);
                 updateProgress(100, '❌ Network error occurred');
-                document.getElementById('status').innerHTML = '❌ Network error. Please check your connection and try again.';
+                document.getElementById('status').innerHTML = '❌ Network error. Please check connection and try again.';
                 document.getElementById('status').className = 'status error';
-                document.getElementById('verifyBtn').innerHTML = '🔄 Retry Verification';
                 document.getElementById('verifyBtn').disabled = false;
-                verificationStarted = false;
             }}
         }}
-        
-        // Auto-initialize when page loads
-        window.addEventListener('load', () => {{
-            updateProgress(5, '⚡ System initialized - Ready for verification');
-        }});
     </script>
 </body>
 </html>
@@ -1159,54 +1066,39 @@ async def telegram_webhook(update: dict):
 async def health_check():
     return {
         "status": "healthy",
-        "service": "enhanced-wallet-bot-final",
+        "service": "strict-device-verification-bot",
         "timestamp": datetime.utcnow().isoformat(),
         "mongodb_connected": db_connected,
-        "telegram_bot_initialized": wallet_bot.initialized if wallet_bot else False,
-        "temp_storage_active": not db_connected,
-        "version": "4.0.0-final-working"
+        "security_policy": "ONE_DEVICE_ONE_ACCOUNT_STRICTLY_ENFORCED",
+        "version": "5.0.0-strict"
     }
 
 @app.get("/")
 async def root():
     return {
-        "message": f"{EMOJI['rocket']} Enhanced Wallet Bot - Final Working Version",
+        "message": f"{EMOJI['shield']} Strict Device Verification Bot",
         "status": "running",
-        "database": "MongoDB Atlas" if db_connected else "Temporary Storage",
-        "features": [
-            "Advanced Device Fingerprinting",
-            "One Device One Account Policy", 
-            "Fallback Storage System",
-            "Enhanced Security Features",
-            "Complete Admin Dashboard"
-        ]
+        "policy": "ONE DEVICE = ONE ACCOUNT ONLY",
+        "security": "MAXIMUM ENFORCEMENT",
+        "database": "FRESH START - OLD DATA CLEARED"
     }
 
 @app.get("/api/admin/dashboard")
 async def admin_dashboard(admin: str = Depends(authenticate_admin)):
-    """Complete Admin Dashboard"""
     try:
         stats = await user_model.get_user_stats()
         
         return {
-            "admin_panel": "Enhanced Control Dashboard - Final Version",
-            "system_overview": {
+            "admin_panel": "STRICT SECURITY ENFORCEMENT DASHBOARD",
+            "database_status": "FRESH - OLD DATA CLEARED",
+            "security_policy": "ONE DEVICE ONE ACCOUNT - STRICTLY ENFORCED",
+            "statistics": {
                 "total_users": stats["total_users"],
-                "verified_users": stats["verified_users"], 
-                "pending_verification": stats["pending_verification"],
-                "temp_storage_users": stats["temp_storage_users"]
-            },
-            "database_status": {
-                "mongodb_connected": db_connected,
-                "fallback_storage": "Active" if not db_connected else "Standby",
-                "data_persistence": "Guaranteed"
-            },
-            "security_features": {
-                "device_fingerprinting": "Advanced Multi-Layer",
-                "fraud_prevention": "Real-time Active",
-                "account_policy": "One Device One Account"
-            },
-            "status": "All systems operational with fallback protection"
+                "verified_users": stats["verified_users"],
+                "rejected_verifications": stats["rejected_verifications"],
+                "unique_devices": stats["unique_devices"],
+                "enforcement_rate": "100% - NO EXCEPTIONS"
+            }
         }
     except Exception as e:
         logger.error(f"Admin dashboard error: {e}")
@@ -1217,9 +1109,9 @@ async def admin_dashboard(admin: str = Depends(authenticate_admin)):
 async def startup_event():
     global wallet_bot
     
-    logger.info("Starting Complete Enhanced Wallet Bot System...")
+    logger.info("Starting STRICT Device Verification Bot System...")
     
-    # Initialize database (with fallback to temp storage)
+    # Initialize database with fresh start
     db_success = await init_database()
     
     # Initialize bot
@@ -1243,46 +1135,30 @@ async def startup_event():
             )
             
             if result:
-                logger.info(f"Enhanced webhook configured: {webhook_url}")
-            else:
-                logger.error("Webhook configuration failed")
+                logger.info(f"STRICT webhook configured: {webhook_url}")
                 
         except Exception as e:
             logger.error(f"Bot startup error: {e}")
     
-    storage_type = "MongoDB Atlas" if db_connected else "Temporary Storage with Database Fallback"
-    logger.info(f"Complete Enhanced Wallet Bot System Ready! Storage: {storage_type}")
+    logger.info("STRICT DEVICE VERIFICATION BOT READY!")
+    logger.info("POLICY: ONE DEVICE = ONE ACCOUNT ONLY")
+    logger.info("DATABASE: FRESH START - OLD DATA CLEARED")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Shutting down complete enhanced bot system...")
+    logger.info("Shutting down strict verification bot...")
     if wallet_bot and wallet_bot.application:
         try:
             await wallet_bot.bot.delete_webhook()
             await wallet_bot.application.stop()
             await wallet_bot.application.shutdown()
             await wallet_bot.bot.shutdown()
-            logger.info("Bot shutdown completed successfully")
+            logger.info("Strict bot shutdown completed")
         except Exception as e:
             logger.error(f"Shutdown error: {e}")
-    
-    if db_client:
-        try:
-            db_client.close()
-            logger.info("Database connection closed")
-        except:
-            pass
-    
-    logger.info("Complete system shutdown finished")
 
 # Main application entry point
 if __name__ == "__main__":
     import uvicorn
-    logger.info(f"Starting Complete Enhanced Secure Wallet Bot - Port {PORT}")
-    
-    uvicorn.run(
-        app, 
-        host="0.0.0.0", 
-        port=PORT,
-        log_level="info"
-    )
+    logger.info(f"Starting STRICT DEVICE VERIFICATION BOT - Port {PORT}")
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
