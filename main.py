@@ -73,7 +73,8 @@ EMOJI: Dict[str, str] = {
     "check": "✅", "cross": "❌", "pending": "⏳", "warn": "⚠️",
     "lock": "🔒", "wallet": "💰", "gift": "🎁", "gear": "⚙️",
     "chart": "📊", "rocket": "🚀", "camera": "📷", "bank": "🏦",
-    "bell": "🔔", "star": "⭐", "download": "⬇️", "upload": "⬆️"
+    "bell": "🔔", "star": "⭐", "download": "⬇️", "upload": "⬆️",
+    'shield': '🛡️'
 }
 
 # ---------------- Directory Structure -----------------------
