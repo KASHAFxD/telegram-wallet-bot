@@ -4591,9 +4591,10 @@ async def get_admin_dashboard(username: str = Depends(authenticate_admin)):
     try:
         # User statistics
         users_collection = user_model.get_collection('users')
-        total_users = await users_collection.count_documents({}) if users_collection else 0
-        verified_users = await users_collection.count_documents({"device_verified": True}) if users_collection else 0
-        banned_users = await users_collection.count_documents({"is_banned": True}) if users_collection else 0
+        total_users = await users_collection.count_documents({}) if users_collection is not None else 0
+        # total_users = await users_collection.count_documents({}) if users_collection else 0
+        verified_users = await users_collection.count_documents({"device_verified": True}) if users_collection is not None else 0
+        banned_users = await users_collection.count_documents({"is_banned": True}) if users_collection is not None else 0
         
         # Wallet statistics  
         wallet_stats = await users_collection.aggregate([
@@ -4603,7 +4604,7 @@ async def get_admin_dashboard(username: str = Depends(authenticate_admin)):
                 "total_earned": {"$sum": "$total_earned"},
                 "total_withdrawals": {"$sum": "$withdrawal_total"}
             }}
-        ]).to_list(1) if users_collection else []
+        ]).to_list(1) if users_collection is not None else []
         
         wallet_data = wallet_stats[0] if wallet_stats else {
             "total_balance": 0, "total_earned": 0, "total_withdrawals": 0
@@ -4625,7 +4626,7 @@ async def get_admin_dashboard(username: str = Depends(authenticate_admin)):
         week_ago = datetime.utcnow() - timedelta(days=7)
         recent_users = await users_collection.count_documents({
             "created_at": {"$gte": week_ago}
-        }) if users_collection else 0
+        }) if users_collection is not None else 0
         
         dashboard_data = {
             "overview": {
@@ -4747,7 +4748,7 @@ async def get_user_details(user_id: int, username: str = Depends(authenticate_ad
         # Get additional data
         transactions_collection = user_model.get_collection('transactions')
         transactions = []
-        if transactions_collection:
+        if transactions_collection is not None:
             transactions = await transactions_collection.find({
                 "user_id": user_id
             }).sort("timestamp", -1).limit(20).to_list(20)
@@ -4755,7 +4756,7 @@ async def get_user_details(user_id: int, username: str = Depends(authenticate_ad
         # Get withdrawal history
         withdrawals_collection = user_model.get_collection('withdrawal_requests')
         withdrawals = []
-        if withdrawals_collection:
+        if withdrawals_collection is not None:
             withdrawals = await withdrawals_collection.find({
                 "user_id": user_id
             }).sort("request_time", -1).limit(10).to_list(10)
