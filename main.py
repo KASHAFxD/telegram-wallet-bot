@@ -628,7 +628,7 @@ class EnhancedUserModel:
             return False
         
         collection = self.get_collection('users')
-        if not collection:
+        if collection is None:
             return False
         
         try:
@@ -681,7 +681,7 @@ class EnhancedUserModel:
     async def record_transaction(self, user_id: int, amount: float, transaction_type: str, description: str):
         """Record transaction in history"""
         collection = self.get_collection('transactions')
-        if not collection:
+        if collection is None:
             return
         
         try:
@@ -766,7 +766,7 @@ class EnhancedUserModel:
     async def record_withdrawal_request(self, user_id: int, amount: float, payment_method: str, payment_details: Dict[str, Any]) -> Dict[str, Any]:
         """Record new withdrawal request"""
         collection = self.get_collection('withdrawal_requests')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database error"}
         
         try:
@@ -807,7 +807,7 @@ class EnhancedUserModel:
     async def get_campaigns(self, status: str = None, user_id: int = None) -> List[Dict[str, Any]]:
         """Get campaigns with optional filtering"""
         collection = self.get_collection('campaigns')
-        if not collection:
+        if collection is None:
             return []
         
         try:
@@ -827,7 +827,7 @@ class EnhancedUserModel:
     async def get_campaign_by_id(self, campaign_id: str) -> Optional[Dict[str, Any]]:
         """Get specific campaign by ID"""
         collection = self.get_collection('campaigns')
-        if not collection:
+        if collection is None:
             return None
         
         try:
@@ -841,7 +841,7 @@ class EnhancedUserModel:
     async def submit_screenshot(self, user_id: int, campaign_id: str, screenshot_data: Dict[str, Any]) -> Dict[str, Any]:
         """Submit screenshot for campaign"""
         collection = self.get_collection('screenshots')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database error"}
         
         try:
@@ -877,7 +877,7 @@ class EnhancedUserModel:
     async def get_bot_settings(self) -> Dict[str, Any]:
         """Get current bot configuration"""
         collection = self.get_collection('bot_settings')
-        if not collection:
+        if collection is None:
             return {}
         
         try:
@@ -891,7 +891,7 @@ class EnhancedUserModel:
     async def update_bot_settings(self, updates: Dict[str, Any]) -> bool:
         """Update bot configuration"""
         collection = self.get_collection('bot_settings')
-        if not collection:
+        if collection is None:
             return False
         
         try:
@@ -920,7 +920,7 @@ class GiftCodeManager:
     async def create_gift_codes(self, amount: float, quantity: int, expiry_days: int = 30) -> List[str]:
         """Create multiple gift codes"""
         collection = self.user_model.get_collection('gift_codes')
-        if not collection:
+        if collection is None:
             return []
         
         try:
@@ -960,7 +960,7 @@ class GiftCodeManager:
             return {"success": False, "message": "Device verification required"}
         
         collection = self.user_model.get_collection('gift_codes')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Service unavailable"}
         
         try:
@@ -1036,7 +1036,7 @@ class CampaignManager:
     async def create_campaign(self, campaign_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create new campaign"""
         collection = self.user_model.get_collection('campaigns')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database error"}
         
         try:
@@ -1079,7 +1079,7 @@ class CampaignManager:
     async def update_campaign(self, campaign_id: str, updates: Dict[str, Any]) -> bool:
         """Update existing campaign"""
         collection = self.user_model.get_collection('campaigns')
-        if not collection:
+        if collection is None:
             return False
         
         try:
@@ -1105,7 +1105,7 @@ class CampaignManager:
     async def get_active_campaigns(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get all active campaigns"""
         collection = self.user_model.get_collection('campaigns')
-        if not collection:
+        if collection is None:
             return []
         
         try:
@@ -1195,7 +1195,7 @@ class CampaignManager:
         
         # Check if user already participated
         screenshots_collection = self.user_model.get_collection('screenshots')
-        if screenshots_collection:
+        if screenshots_collection is not None:
             existing = await screenshots_collection.find_one({
                 "user_id": user_id,
                 "campaign_id": campaign_id
@@ -1268,7 +1268,7 @@ class ScreenshotManager:
             if submission_result["success"]:
                 # Update campaign participation count
                 campaigns_collection = self.user_model.get_collection('campaigns')
-                if campaigns_collection:
+                if campaigns_collection is not None:
                     await campaigns_collection.update_one(
                         {"campaign_id": campaign_id},
                         {
@@ -1292,7 +1292,7 @@ class ScreenshotManager:
     async def get_pending_screenshots(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get screenshots pending approval"""
         collection = self.user_model.get_collection('screenshots')
-        if not collection:
+        if collection is None:
             return []
         
         try:
@@ -1323,7 +1323,7 @@ class ScreenshotManager:
     async def approve_screenshot(self, submission_id: str, admin_notes: str = "") -> Dict[str, Any]:
         """Approve screenshot and reward user"""
         collection = self.user_model.get_collection('screenshots')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database error"}
         
         try:
@@ -1367,7 +1367,7 @@ class ScreenshotManager:
             })
             
             campaigns_collection = self.user_model.get_collection('campaigns')
-            if campaigns_collection:
+            if campaigns_collection is not None:
                 await campaigns_collection.update_one(
                     {"campaign_id": screenshot['campaign_id']},
                     {"$inc": {"approved_submissions": 1}}
@@ -1387,7 +1387,7 @@ class ScreenshotManager:
     async def reject_screenshot(self, submission_id: str, admin_notes: str = "") -> Dict[str, Any]:
         """Reject screenshot submission"""
         collection = self.user_model.get_collection('screenshots')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database error"}
         
         try:
@@ -1416,7 +1416,7 @@ class ScreenshotManager:
             })
             
             campaigns_collection = self.user_model.get_collection('campaigns')
-            if campaigns_collection:
+            if campaigns_collection is not None:
                 await campaigns_collection.update_one(
                     {"campaign_id": screenshot['campaign_id']},
                     {"$inc": {"rejected_submissions": 1}}
@@ -1448,7 +1448,7 @@ class ScreenshotManager:
         """Create ZIP file of screenshots"""
         try:
             collection = self.user_model.get_collection('screenshots')
-            if not collection:
+            if collection is None:
                 return None
             
             query = {}
@@ -1775,7 +1775,7 @@ class ManualPaymentProcessor:
     async def process_admin_decision(self, request_id: str, action: str, admin_notes: str = "") -> Dict[str, Any]:
         """Process admin approval/rejection decision"""
         collection = self.user_model.get_collection('withdrawal_requests')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database error"}
         
         try:
@@ -2026,7 +2026,7 @@ class PaymentManager:
         """Get withdrawal statistics for admin dashboard"""
         try:
             collection = self.user_model.get_collection('withdrawal_requests')
-            if not collection:
+            if collection is None:
                 return {}
             
             # Aggregate withdrawal stats
@@ -2099,7 +2099,7 @@ class ChannelManager:
     async def add_force_join_channel(self, channel_data: Dict[str, Any]) -> Dict[str, Any]:
         """Add channel to force join list"""
         collection = self.user_model.get_collection('force_join_channels')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database error"}
         
         try:
@@ -2140,7 +2140,7 @@ class ChannelManager:
     async def remove_force_join_channel(self, channel_id: str) -> bool:
         """Remove channel from force join list"""
         collection = self.user_model.get_collection('force_join_channels')
-        if not collection:
+        if collection is None:
             return False
         
         try:
@@ -2163,7 +2163,7 @@ class ChannelManager:
     async def get_active_force_join_channels(self) -> List[Dict[str, Any]]:
         """Get all active force join channels"""
         collection = self.user_model.get_collection('force_join_channels')
-        if not collection:
+        if collection is None:
             return []
         
         try:
@@ -2240,7 +2240,7 @@ class ChannelManager:
         """Update channel member count"""
         try:
             collection = self.user_model.get_collection('force_join_channels')
-            if not collection:
+            if collection is None:
                 return
             
             channel = await collection.find_one({"channel_id": channel_id})
@@ -2315,7 +2315,7 @@ class ChannelManager:
         """Get channel statistics for admin dashboard"""
         try:
             collection = self.user_model.get_collection('force_join_channels')
-            if not collection:
+            if collection is None:
                 return {}
             
             channels = await collection.find({"is_active": True}).to_list(100)
@@ -2575,7 +2575,7 @@ class APIIntegrationManager:
         """Validate API key and return permissions"""
         try:
             collection = self.user_model.get_collection('api_keys')
-            if not collection:
+            if collection is None:
                 return {"valid": False, "message": "Service unavailable"}
             
             api_doc = await collection.find_one({"api_key": api_key, "is_active": True})
@@ -3779,7 +3779,7 @@ class CallbackQueryHandler:
         """Show user transaction history"""
         try:
             collection = user_model.get_collection('transactions')
-            if not collection:
+            if collection is None:
                 await update.callback_query.answer("Transaction history not available")
                 return
             
@@ -4612,12 +4612,12 @@ async def get_admin_dashboard(username: str = Depends(authenticate_admin)):
         
         # Campaign statistics
         campaigns_collection = user_model.get_collection('campaigns')
-        active_campaigns = await campaigns_collection.count_documents({"status": "active"}) if campaigns_collection else 0
-        total_campaigns = await campaigns_collection.count_documents({}) if campaigns_collection else 0
+        active_campaigns = await campaigns_collection.count_documents({"status": "active"}) if campaigns_collection is not None else 0
+        total_campaigns = await campaigns_collection.count_documents({}) if campaigns_collection is not None else 0
         
         # Screenshot statistics
         screenshots_collection = user_model.get_collection('screenshots')
-        pending_screenshots = await screenshots_collection.count_documents({"status": "pending"}) if screenshots_collection else 0
+        pending_screenshots = await screenshots_collection.count_documents({"status": "pending"}) if screenshots_collection is not None else 0
         
         # Withdrawal statistics
         withdrawal_stats = await payment_manager.get_withdrawal_statistics()
@@ -4672,7 +4672,7 @@ async def get_users_list(
     """Get paginated users list with search and filters"""
     try:
         collection = user_model.get_collection('users')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database not available"}
         
         # Build query
@@ -4974,7 +4974,7 @@ async def get_campaigns_list(
     """Get campaigns list with pagination"""
     try:
         collection = user_model.get_collection('campaigns')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database not available"}
         
         query = {}
@@ -5177,7 +5177,7 @@ async def get_screenshots_list(
             screenshots = screenshots[start_idx:end_idx]
         else:
             collection = user_model.get_collection('screenshots')
-            if not collection:
+            if collection is None:
                 return {"success": False, "message": "Database not available"}
             
             query = {"status": status} if status != "all" else {}
@@ -5324,7 +5324,7 @@ async def get_screenshot_image(submission_id: str, username: str = Depends(authe
     """Get screenshot image file"""
     try:
         collection = user_model.get_collection('screenshots')
-        if not collection:
+        if collection is None:
             raise HTTPException(status_code=500, detail="Database not available")
         
         screenshot = await collection.find_one({"submission_id": submission_id})
@@ -5386,7 +5386,7 @@ async def get_withdrawals_list(
     """Get withdrawal requests with filtering and pagination"""
     try:
         collection = user_model.get_collection('withdrawal_requests')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database not available"}
         
         query = {}
@@ -5547,7 +5547,7 @@ async def get_gift_codes_list(
     """Get gift codes list with pagination"""
     try:
         collection = user_model.get_collection('gift_codes')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database not available"}
         
         query = {}
@@ -5652,7 +5652,7 @@ async def get_gift_codes_statistics(username: str = Depends(authenticate_admin))
     """Get gift code statistics"""
     try:
         collection = user_model.get_collection('gift_codes')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database not available"}
         
         # Get overall statistics
@@ -5709,7 +5709,7 @@ async def delete_gift_code(code: str, username: str = Depends(authenticate_admin
     """Delete (deactivate) a gift code"""
     try:
         collection = user_model.get_collection('gift_codes')
-        if not collection:
+        if collection is None:
             raise HTTPException(status_code=500, detail="Database not available")
         
         result = await collection.update_one(
@@ -5956,7 +5956,7 @@ async def get_api_keys_list(username: str = Depends(authenticate_admin)):
     """Get list of API keys for external integrations"""
     try:
         collection = user_model.get_collection('api_keys')
-        if not collection:
+        if collection is None:
             return {"success": False, "message": "Database not available"}
         
         api_keys = await collection.find({}).sort("created_at", -1).to_list(100)
@@ -6015,7 +6015,7 @@ async def deactivate_api_key(api_key: str, username: str = Depends(authenticate_
     """Deactivate API key"""
     try:
         collection = user_model.get_collection('api_keys')
-        if not collection:
+        if collection is None:
             raise HTTPException(status_code=500, detail="Database not available")
         
         result = await collection.update_one(
