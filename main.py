@@ -55,7 +55,14 @@ BOT_TOKEN: str = os.getenv("BOT_TOKEN", "REPLACE_ME")
 ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")
 ADMIN_CHAT_ID: int = int(os.getenv("ADMIN_CHAT_ID", "0") or 0)
-
+# ================= TEMPORARY DEBUG CODE =================
+print("--- LOADING ADMIN CREDENTIALS ---")
+print(f"DEBUG: ADMIN_USERNAME from env: '{os.getenv('ADMIN_USERNAME')}'")
+print(f"DEBUG: ADMIN_PASSWORD from env: '{os.getenv('ADMIN_PASSWORD')}'")
+print(f"DEBUG: Using ADMIN_USERNAME: '{ADMIN_USERNAME}'")
+print(f"DEBUG: Using ADMIN_PASSWORD: '{ADMIN_PASSWORD}'")
+print("-----------------------------------")
+# ======================================================
 MONGODB_URL: str = os.getenv(
     "MONGODB_URL",
     "mongodb://localhost:27017/walletbot"
