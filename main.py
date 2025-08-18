@@ -7046,589 +7046,2614 @@ async def admin_dashboard_page():
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/framer-motion@10/dist/framer-motion.js"></script>
+    <script src="https://unpkg.com/recharts@2.8.0/umd/Recharts.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a'
+                        },
+                        gradient: {
+                            from: '#667eea',
+                            to: '#764ba2'
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-in-out',
+                        'slide-up': 'slideUp 0.3s ease-out',
+                        'bounce-soft': 'bounceSoft 2s infinite'
+                    }
+                }
+            }
+        }
+    </script>
+    
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f8f9fa;
-            color: #333;
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
         
-        .admin-layout {
-            display: flex;
-            min-height: 100vh;
+        @keyframes bounceSoft {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
         }
         
-        .sidebar {
-            width: 280px;
+        .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px 0;
-            position: fixed;
-            height: 100vh;
-            overflow-y: auto;
         }
         
-        .sidebar-header {
-            padding: 0 20px 30px 20px;
-            text-align: center;
-            border-bottom: 1px solid rgba(255,255,255,0.2);
+        .glass-effect {
+            backdrop-filter: blur(16px);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
-        .sidebar-logo {
-            font-size: 2rem;
-            margin-bottom: 10px;
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
-        .sidebar-menu {
-            list-style: none;
-            padding: 20px 0;
+        .card-hover:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         }
         
-        .sidebar-menu li {
-            margin: 5px 0;
+        .sidebar-gradient {
+            background: linear-gradient(180deg, #1e3a8a 0%, #3730a3 50%, #581c87 100%);
         }
         
-        .sidebar-menu a {
-            display: flex;
-            align-items: center;
-            padding: 15px 20px;
-            color: white;
-            text-decoration: none;
-            transition: background-color 0.3s;
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
         }
         
-        .sidebar-menu a:hover, .sidebar-menu a.active {
-            background-color: rgba(255,255,255,0.2);
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 3px;
         }
         
-        .sidebar-menu i {
-            margin-right: 12px;
-            width: 20px;
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
         }
         
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 20px;
-        }
-        
-        .header {
-            background: white;
-            padding: 20px 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .stat-card {
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            text-align: center;
-            transition: transform 0.3s;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-5px);
-        }
-        
-        .stat-icon {
-            font-size: 2.5rem;
-            margin-bottom: 15px;
-            color: #667eea;
-        }
-        
-        .stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 5px;
-        }
-        
-        .stat-label {
-            color: #666;
-            font-size: 0.9rem;
-        }
-        
-        .content-section {
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-        
-        .section-title {
-            font-size: 1.5rem;
-            margin-bottom: 20px;
-            color: #333;
-            display: flex;
-            align-items: center;
-        }
-        
-        .section-title i {
-            margin-right: 10px;
-            color: #667eea;
-        }
-        
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-        
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-        
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        
-        .table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        
-        .table th, .table td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #dee2e6;
-        }
-        
-        .table th {
-            background: #f8f9fa;
-            font-weight: 600;
-        }
-        
-        .badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        
-        .badge-success {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .badge-warning {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .badge-danger {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-        }
-        
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px 0;
-        }
-        
-        .success {
-            background: #d4edda;
-            color: #155724;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px 0;
-        }
-        
-        @media (max-width: 768px) {
-            .sidebar {
-                width: 100%;
-                height: auto;
-                position: relative;
-            }
-            
-            .main-content {
-                margin-left: 0;
-            }
-            
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
     </style>
 </head>
-<body>
+<body class="bg-gray-50">
     <div id="root">
-        <div class="loading">
-            <i class="fas fa-spinner fa-spin fa-2x"></i>
-            <p>Loading Admin Dashboard...</p>
+        <div class="flex items-center justify-center min-h-screen">
+            <div class="animate-bounce-soft">
+                <i class="fas fa-crown text-6xl text-primary-500"></i>
+                <p class="mt-4 text-xl text-gray-600">Loading Enterprise Dashboard...</p>
+            </div>
         </div>
     </div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
-        
-        // API utility functions
-        const api = {
-            async request(url, options = {}) {
-                const auth = sessionStorage.getItem('adminAuth');
-                if (!auth) {
-                    window.location.href = '/admin';
-                    return;
+        const { useState, useEffect, useCallback, useMemo } = React;
+        const { motion, AnimatePresence } = Motion;
+        const { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+
+        // 🎨 Modern Theme Configuration
+        const theme = {
+            colors: {
+                primary: '#3b82f6',
+                secondary: '#8b5cf6',
+                success: '#10b981',
+                warning: '#f59e0b',
+                danger: '#ef4444',
+                info: '#06b6d4',
+                gradient: {
+                    primary: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    success: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    warning: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    danger: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
                 }
-                
-                const response = await fetch(url, {
-                    ...options,
-                    headers: {
-                        'Authorization': `Basic ${auth}`,
-                        'Content-Type': 'application/json',
-                        ...options.headers
-                    }
-                });
-                
-                if (response.status === 401) {
-                    sessionStorage.removeItem('adminAuth');
-                    window.location.href = '/admin';
-                    return;
-                }
-                
-                return response.json();
             },
-            
-            getDashboard: () => api.request('/api/admin/dashboard'),
-            getUsers: (page = 1, search = '') => api.request(`/api/admin/users?page=${page}&search=${search}`),
-            getCampaigns: () => api.request('/api/admin/campaigns'),
-            getScreenshots: () => api.request('/api/admin/screenshots'),
-            getWithdrawals: () => api.request('/api/admin/withdrawals'),
+            shadows: {
+                sm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                md: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                xl: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                '2xl': '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+            }
         };
-        
-        // Main Admin Dashboard Component
-        function AdminDashboard() {
-            const [currentSection, setCurrentSection] = useState('dashboard');
-            const [dashboardData, setDashboardData] = useState(null);
+
+        // 🔧 API Management
+        const useAPI = () => {
+            const [auth, setAuth] = useState(sessionStorage.getItem('adminAuth'));
+            
+            const request = useCallback(async (url, options = {}) => {
+                if (!auth && !url.includes('/auth')) {
+                    window.location.href = '/admin';
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(url, {
+                        ...options,
+                        headers: {
+                            'Authorization': `Basic ${auth}`,
+                            'Content-Type': 'application/json',
+                            ...options.headers
+                        }
+                    });
+                    
+                    if (response.status === 401) {
+                        sessionStorage.removeItem('adminAuth');
+                        window.location.href = '/admin';
+                        return;
+                    }
+                    
+                    return await response.json();
+                } catch (error) {
+                    console.error('API Error:', error);
+                    throw error;
+                }
+            }, [auth]);
+            
+            return {
+                // Dashboard APIs
+                getDashboard: () => request('/api/admin/dashboard'),
+                getUsers: (params) => request(`/api/admin/users?${new URLSearchParams(params)}`),
+                getCampaigns: (params) => request(`/api/admin/campaigns?${new URLSearchParams(params)}`),
+                getScreenshots: (params) => request(`/api/admin/screenshots?${new URLSearchParams(params)}`),
+                getWithdrawals: (params) => request(`/api/admin/withdrawals?${new URLSearchParams(params)}`),
+                
+                // User Management
+                getUserDetails: (userId) => request(`/api/admin/users/${userId}`),
+                updateUserWallet: (userId, data) => request(`/api/admin/users/${userId}/wallet`, {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                }),
+                banUser: (userId, data) => request(`/api/admin/users/${userId}/ban`, {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                }),
+                
+                // Campaign Management
+                createCampaign: (data) => request('/api/admin/campaigns', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                }),
+                updateCampaign: (id, data) => request(`/api/admin/campaigns/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(data)
+                }),
+                deleteCampaign: (id) => request(`/api/admin/campaigns/${id}`, {
+                    method: 'DELETE'
+                }),
+                
+                // Screenshot Management
+                approveScreenshot: (id, notes) => request(`/api/admin/screenshots/${id}/approve`, {
+                    method: 'POST',
+                    body: JSON.stringify({ admin_notes: notes })
+                }),
+                rejectScreenshot: (id, notes) => request(`/api/admin/screenshots/${id}/reject`, {
+                    method: 'POST',
+                    body: JSON.stringify({ admin_notes: notes })
+                }),
+                bulkApproveScreenshots: (ids) => request('/api/admin/screenshots/bulk-approve', {
+                    method: 'POST',
+                    body: JSON.stringify({ submission_ids: ids })
+                }),
+                
+                // Withdrawal Management
+                approveWithdrawal: (id, notes) => request(`/api/admin/withdrawals/${id}/approve`, {
+                    method: 'POST',
+                    body: JSON.stringify({ admin_notes: notes })
+                }),
+                rejectWithdrawal: (id, notes) => request(`/api/admin/withdrawals/${id}/reject`, {
+                    method: 'POST',
+                    body: JSON.stringify({ admin_notes: notes })
+                })
+            };
+        };
+
+        // 🎯 Custom Hooks
+        const useData = (apiCall, dependencies = []) => {
+            const [data, setData] = useState(null);
             const [loading, setLoading] = useState(true);
             const [error, setError] = useState(null);
             
-            useEffect(() => {
-                loadDashboardData();
-            }, []);
-            
-            const loadDashboardData = async () => {
+            const fetchData = useCallback(async () => {
                 try {
                     setLoading(true);
-                    const data = await api.getDashboard();
-                    if (data.success) {
-                        setDashboardData(data.data);
-                        setError(null);
-                    } else {
-                        setError('Failed to load dashboard data');
-                    }
+                    setError(null);
+                    const result = await apiCall();
+                    setData(result?.success ? result.data : null);
                 } catch (err) {
-                    setError('Network error occurred');
+                    setError(err.message);
                 } finally {
                     setLoading(false);
                 }
+            }, dependencies);
+            
+            useEffect(() => {
+                fetchData();
+            }, [fetchData]);
+            
+            return { data, loading, error, refetch: fetchData };
+        };
+
+        // 📊 Dashboard Stats Card Component
+        const StatsCard = ({ icon, title, value, change, changeType, color, delay = 0 }) => (
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay, duration: 0.5 }}
+                className="bg-white rounded-2xl p-6 shadow-lg card-hover border border-gray-100"
+            >
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <div className={`p-4 rounded-2xl bg-gradient-to-br ${color}`}>
+                            <i className={`${icon} text-2xl text-white`}></i>
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-gray-600">{title}</p>
+                            <p className="text-3xl font-bold text-gray-900">{value}</p>
+                        </div>
+                    </div>
+                    {change && (
+                        <div className={`flex items-center space-x-1 px-3 py-1 rounded-full text-sm font-medium ${
+                            changeType === 'increase' 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-red-100 text-red-700'
+                        }`}>
+                            <i className={`fas fa-arrow-${changeType === 'increase' ? 'up' : 'down'} text-xs`}></i>
+                            <span>{change}</span>
+                        </div>
+                    )}
+                </div>
+            </motion.div>
+        );
+
+        // 📈 Advanced Chart Component
+        const AdvancedChart = ({ data, type = 'line', title, height = 300 }) => {
+            const chartColors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+            
+            const renderChart = () => {
+                switch (type) {
+                    case 'area':
+                        return (
+                            <AreaChart data={data}>
+                                <defs>
+                                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
+                                <YAxis stroke="#64748b" fontSize={12} />
+                                <Tooltip 
+                                    contentStyle={{
+                                        backgroundColor: 'white',
+                                        border: 'none',
+                                        borderRadius: '12px',
+                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                                    }}
+                                />
+                                <Area 
+                                    type="monotone" 
+                                    dataKey="value" 
+                                    stroke="#3b82f6" 
+                                    fillOpacity={1} 
+                                    fill="url(#colorRevenue)" 
+                                    strokeWidth={3}
+                                />
+                            </AreaChart>
+                        );
+                    case 'bar':
+                        return (
+                            <BarChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
+                                <YAxis stroke="#64748b" fontSize={12} />
+                                <Tooltip 
+                                    contentStyle={{
+                                        backgroundColor: 'white',
+                                        border: 'none',
+                                        borderRadius: '12px',
+                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                                    }}
+                                />
+                                <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        );
+                    case 'pie':
+                        return (
+                            <PieChart>
+                                <Pie
+                                    data={data}
+                                    cx="50%"
+                                    cy="50%"
+                                    outerRadius={80}
+                                    dataKey="value"
+                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                >
+                                    {data.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        );
+                    default:
+                        return (
+                            <LineChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
+                                <YAxis stroke="#64748b" fontSize={12} />
+                                <Tooltip 
+                                    contentStyle={{
+                                        backgroundColor: 'white',
+                                        border: 'none',
+                                        borderRadius: '12px',
+                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                                    }}
+                                />
+                                <Line 
+                                    type="monotone" 
+                                    dataKey="value" 
+                                    stroke="#3b82f6" 
+                                    strokeWidth={3}
+                                    dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
+                                />
+                            </LineChart>
+                        );
+                }
             };
             
-            const menuItems = [
-                { id: 'dashboard', icon: 'fas fa-tachometer-alt', label: 'Dashboard' },
-                { id: 'users', icon: 'fas fa-users', label: 'Users' },
-                { id: 'campaigns', icon: 'fas fa-bullhorn', label: 'Campaigns' },
-                { id: 'screenshots', icon: 'fas fa-camera', label: 'Screenshots' },
-                { id: 'withdrawals', icon: 'fas fa-money-bill-wave', label: 'Withdrawals' },
-                { id: 'gift-codes', icon: 'fas fa-gift', label: 'Gift Codes' },
-                { id: 'settings', icon: 'fas fa-cog', label: 'Settings' }
-            ];
-            
-            if (loading) {
-                return (
-                    <div className="loading">
-                        <i className="fas fa-spinner fa-spin fa-2x"></i>
-                        <p>Loading Admin Dashboard...</p>
-                    </div>
-                );
-            }
-            
             return (
-                <div className="admin-layout">
-                    <nav className="sidebar">
-                        <div className="sidebar-header">
-                            <div className="sidebar-logo">👑</div>
-                            <h2>Admin Panel</h2>
-                            <p>Enterprise Wallet Bot</p>
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5 }}
+                    className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100"
+                >
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
+                    <ResponsiveContainer width="100%" height={height}>
+                        {renderChart()}
+                    </ResponsiveContainer>
+                </motion.div>
+            );
+        };
+
+        // 🎨 Modern Sidebar Component
+        const ModernSidebar = ({ currentSection, setCurrentSection, isMobile, setIsMobileMenuOpen }) => {
+            const menuItems = [
+                { id: 'dashboard', icon: 'fas fa-chart-line', label: 'Dashboard', color: 'text-blue-500' },
+                { id: 'users', icon: 'fas fa-users', label: 'Users', color: 'text-green-500' },
+                { id: 'campaigns', icon: 'fas fa-bullhorn', label: 'Campaigns', color: 'text-purple-500' },
+                { id: 'screenshots', icon: 'fas fa-camera', label: 'Screenshots', color: 'text-orange-500' },
+                { id: 'withdrawals', icon: 'fas fa-money-bill-wave', label: 'Withdrawals', color: 'text-red-500' },
+                { id: 'gift-codes', icon: 'fas fa-gift', label: 'Gift Codes', color: 'text-pink-500' },
+                { id: 'channels', icon: 'fas fa-broadcast-tower', label: 'Channels', color: 'text-indigo-500' },
+                { id: 'analytics', icon: 'fas fa-chart-pie', label: 'Analytics', color: 'text-cyan-500' },
+                { id: 'settings', icon: 'fas fa-cog', label: 'Settings', color: 'text-gray-500' }
+            ];
+
+            return (
+                <motion.aside
+                    initial={{ x: -280 }}
+                    animate={{ x: 0 }}
+                    className={`${isMobile ? 'fixed inset-y-0 left-0 z-50 w-64' : 'w-80'} sidebar-gradient text-white custom-scrollbar overflow-y-auto`}
+                >
+                    {/* Header */}
+                    <div className="p-6 border-b border-white/20">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+                                    <i className="fas fa-crown text-2xl text-yellow-400"></i>
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold">Admin Panel</h2>
+                                    <p className="text-white/70 text-sm">Enterprise Wallet Bot</p>
+                                </div>
+                            </div>
+                            {isMobile && (
+                                <button
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                                >
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            )}
                         </div>
-                        <ul className="sidebar-menu">
-                            {menuItems.map(item => (
-                                <li key={item.id}>
-                                    <a 
-                                        href="#" 
-                                        className={currentSection === item.id ? 'active' : ''}
-                                        onClick={(e) => {
-                                            e.preventDefault();
+                    </div>
+
+                    {/* Navigation */}
+                    <nav className="p-4">
+                        <ul className="space-y-2">
+                            {menuItems.map((item, index) => (
+                                <motion.li
+                                    key={item.id}
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: index * 0.1 }}
+                                >
+                                    <button
+                                        onClick={() => {
                                             setCurrentSection(item.id);
+                                            if (isMobile) setIsMobileMenuOpen(false);
                                         }}
+                                        className={`w-full flex items-center space-x-4 p-4 rounded-2xl transition-all duration-200 ${
+                                            currentSection === item.id
+                                                ? 'bg-white/20 text-white shadow-lg'
+                                                : 'text-white/80 hover:bg-white/10 hover:text-white'
+                                        }`}
                                     >
-                                        <i className={item.icon}></i>
-                                        {item.label}
-                                    </a>
-                                </li>
+                                        <i className={`${item.icon} text-xl ${item.color}`}></i>
+                                        <span className="font-medium">{item.label}</span>
+                                        {currentSection === item.id && (
+                                            <motion.div
+                                                layoutId="activeTab"
+                                                className="ml-auto w-2 h-2 bg-white rounded-full"
+                                            />
+                                        )}
+                                    </button>
+                                </motion.li>
                             ))}
                         </ul>
                     </nav>
-                    
-                    <main className="main-content">
-                        <header className="header">
-                            <h1>
-                                <i className="fas fa-tachometer-alt"></i>
-                                {menuItems.find(item => item.id === currentSection)?.label || 'Dashboard'}
-                            </h1>
-                            <button 
-                                className="btn btn-primary"
-                                onClick={() => window.location.reload()}
-                            >
-                                <i className="fas fa-sync"></i>
-                                Refresh
-                            </button>
-                        </header>
-                        
-                        {error && (
-                            <div className="error">
-                                <i className="fas fa-exclamation-triangle"></i>
-                                {error}
+
+                    {/* Footer */}
+                    <div className="p-6 border-t border-white/20 mt-auto">
+                        <div className="bg-white/10 rounded-2xl p-4">
+                            <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                                    <i className="fas fa-user text-white"></i>
+                                </div>
+                                <div>
+                                    <p className="font-medium">Admin User</p>
+                                    <p className="text-white/70 text-sm">Online</p>
+                                </div>
                             </div>
-                        )}
-                        
-                        <DashboardContent 
-                            section={currentSection} 
-                            data={dashboardData}
-                            onRefresh={loadDashboardData}
-                        />
-                    </main>
-                </div>
+                        </div>
+                    </div>
+                </motion.aside>
             );
-        }
-        
-        // Dashboard Content Component
-        function DashboardContent({ section, data, onRefresh }) {
-            switch (section) {
-                case 'dashboard':
-                    return <DashboardOverview data={data} />;
-                case 'users':
-                    return <UsersSection />;
-                case 'campaigns':
-                    return <CampaignsSection />;
-                case 'screenshots':
-                    return <ScreenshotsSection />;
-                case 'withdrawals':
-                    return <WithdrawalsSection />;
-                default:
-                    return <DashboardOverview data={data} />;
+        };
+
+        // 📱 Mobile Header Component
+        const MobileHeader = ({ title, setIsMobileMenuOpen }) => (
+            <motion.header
+                initial={{ y: -50, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                className="lg:hidden bg-white shadow-lg p-4 flex items-center justify-between"
+            >
+                <button
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                    <i className="fas fa-bars text-gray-600"></i>
+                </button>
+                <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+                <button className="p-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors">
+                    <i className="fas fa-sync-alt"></i>
+                </button>
+            </motion.header>
+        );
+
+        // 🏠 Dashboard Overview Component
+        const DashboardOverview = () => {
+            const api = useAPI();
+            const { data: dashboardData, loading, error, refetch } = useData(api.getDashboard);
+
+            if (loading) {
+                return (
+                    <div className="flex items-center justify-center min-h-96">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto"></div>
+                            <p className="mt-4 text-gray-600">Loading dashboard data...</p>
+                        </div>
+                    </div>
+                );
             }
-        }
-        
-        // Dashboard Overview Component
-        function DashboardOverview({ data }) {
-            if (!data) return <div className="loading">Loading...</div>;
-            
+
+            if (error) {
+                return (
+                    <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+                        <div className="flex items-center space-x-3">
+                            <i className="fas fa-exclamation-triangle text-red-500 text-xl"></i>
+                            <div>
+                                <h3 className="text-red-800 font-medium">Error Loading Dashboard</h3>
+                                <p className="text-red-600">{error}</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={refetch}
+                            className="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                        >
+                            <i className="fas fa-redo mr-2"></i>
+                            Retry
+                        </button>
+                    </div>
+                );
+            }
+
             const stats = [
                 {
                     icon: 'fas fa-users',
-                    number: data.overview?.total_users || 0,
-                    label: 'Total Users',
-                    color: '#667eea'
+                    title: 'Total Users',
+                    value: dashboardData?.overview?.total_users?.toLocaleString() || '0',
+                    change: '+12%',
+                    changeType: 'increase',
+                    color: 'from-blue-500 to-blue-600'
                 },
                 {
                     icon: 'fas fa-user-check',
-                    number: data.overview?.verified_users || 0,
-                    label: 'Verified Users',
-                    color: '#28a745'
+                    title: 'Verified Users',
+                    value: dashboardData?.overview?.verified_users?.toLocaleString() || '0',
+                    change: '+8%',
+                    changeType: 'increase',
+                    color: 'from-green-500 to-green-600'
                 },
                 {
                     icon: 'fas fa-wallet',
-                    number: `₹${(data.wallet?.total_balance || 0).toFixed(2)}`,
-                    label: 'Total Balance',
-                    color: '#ffc107'
+                    title: 'Total Balance',
+                    value: `₹${(dashboardData?.wallet?.total_balance || 0).toLocaleString()}`,
+                    change: '+15%',
+                    changeType: 'increase',
+                    color: 'from-purple-500 to-purple-600'
                 },
                 {
                     icon: 'fas fa-money-bill-wave',
-                    number: `₹${(data.wallet?.total_earned || 0).toFixed(2)}`,
-                    label: 'Total Earned',
-                    color: '#28a745'
+                    title: 'Total Earned',
+                    value: `₹${(dashboardData?.wallet?.total_earned || 0).toLocaleString()}`,
+                    change: '+23%',
+                    changeType: 'increase',
+                    color: 'from-orange-500 to-orange-600'
                 },
                 {
                     icon: 'fas fa-bullhorn',
-                    number: data.overview?.active_campaigns || 0,
-                    label: 'Active Campaigns',
-                    color: '#17a2b8'
+                    title: 'Active Campaigns',
+                    value: (dashboardData?.overview?.active_campaigns || 0).toString(),
+                    change: '+2%',
+                    changeType: 'increase',
+                    color: 'from-cyan-500 to-cyan-600'
                 },
                 {
                     icon: 'fas fa-camera',
-                    number: data.overview?.pending_screenshots || 0,
-                    label: 'Pending Screenshots',
-                    color: '#fd7e14'
+                    title: 'Pending Screenshots',
+                    value: (dashboardData?.overview?.pending_screenshots || 0).toString(),
+                    change: '-5%',
+                    changeType: 'decrease',
+                    color: 'from-red-500 to-red-600'
                 }
             ];
-            
+
+            // Sample chart data
+            const chartData = [
+                { name: 'Jan', value: 4000 },
+                { name: 'Feb', value: 3000 },
+                { name: 'Mar', value: 2000 },
+                { name: 'Apr', value: 2780 },
+                { name: 'May', value: 1890 },
+                { name: 'Jun', value: 2390 },
+                { name: 'Jul', value: 3490 }
+            ];
+
+            const pieData = [
+                { name: 'Campaigns', value: 45 },
+                { name: 'Referrals', value: 30 },
+                { name: 'Gift Codes', value: 15 },
+                { name: 'Other', value: 10 }
+            ];
+
             return (
-                <div>
-                    <div className="stats-grid">
+                <div className="space-y-8">
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                         {stats.map((stat, index) => (
-                            <div key={index} className="stat-card">
-                                <div className="stat-icon" style={{ color: stat.color }}>
-                                    <i className={stat.icon}></i>
+                            <StatsCard key={stat.title} {...stat} delay={index * 0.1} />
+                        ))}
+                    </div>
+
+                    {/* Charts Row */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                        <AdvancedChart
+                            data={chartData}
+                            type="area"
+                            title="📈 Revenue Trend"
+                            height={350}
+                        />
+                        <AdvancedChart
+                            data={pieData}
+                            type="pie"
+                            title="💰 Earnings Distribution"
+                            height={350}
+                        />
+                    </div>
+
+                    {/* Recent Activity */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.6 }}
+                        className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
+                    >
+                        <div className="p-6 border-b border-gray-100">
+                            <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                                <i className="fas fa-clock text-blue-500 mr-3"></i>
+                                Recent Activity
+                            </h3>
+                        </div>
+                        <div className="p-6">
+                            <div className="space-y-4">
+                                {[1, 2, 3, 4, 5].map((item, index) => (
+                                    <motion.div
+                                        key={item}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.7 + index * 0.1 }}
+                                        className="flex items-center space-x-4 p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+                                    >
+                                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                            <i className="fas fa-user text-blue-500"></i>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-medium text-gray-900">User #12345 verified device</p>
+                                            <p className="text-sm text-gray-500">2 minutes ago</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                Verified
+                                            </span>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            );
+        };
+
+        // 👥 Users Management Component
+        const UsersManagement = () => {
+            const api = useAPI();
+            const [searchTerm, setSearchTerm] = useState('');
+            const [statusFilter, setStatusFilter] = useState('all');
+            const [currentPage, setCurrentPage] = useState(1);
+            const [selectedUsers, setSelectedUsers] = useState([]);
+
+            const { data: usersData, loading, refetch } = useData(() => 
+                api.getUsers({ 
+                    page: currentPage, 
+                    search: searchTerm, 
+                    status: statusFilter 
+                }), 
+                [currentPage, searchTerm, statusFilter]
+            );
+
+            const handleBulkAction = async (action) => {
+                if (selectedUsers.length === 0) return;
+                
+                try {
+                    // Implement bulk actions
+                    console.log(`Bulk ${action} for users:`, selectedUsers);
+                    await refetch();
+                    setSelectedUsers([]);
+                } catch (error) {
+                    console.error('Bulk action error:', error);
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
+                    >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                                    <i className="fas fa-users text-blue-500 mr-3"></i>
+                                    User Management
+                                </h2>
+                                <p className="text-gray-600 mt-1">Manage user accounts, verification status, and wallets</p>
+                            </div>
+                            
+                            <div className="flex items-center space-x-4">
+                                <select
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="all">All Users</option>
+                                    <option value="verified">Verified</option>
+                                    <option value="unverified">Unverified</option>
+                                    <option value="banned">Banned</option>
+                                </select>
+                                
+                                <div className="relative">
+                                    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                    <input
+                                        type="text"
+                                        placeholder="Search users..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
+                                    />
                                 </div>
-                                <div className="stat-number">{stat.number}</div>
-                                <div className="stat-label">{stat.label}</div>
+                            </div>
+                        </div>
+
+                        {/* Bulk Actions */}
+                        {selectedUsers.length > 0 && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                className="mt-4 p-4 bg-blue-50 rounded-xl border border-blue-200"
+                            >
+                                <div className="flex items-center justify-between">
+                                    <span className="text-blue-700 font-medium">
+                                        {selectedUsers.length} users selected
+                                    </span>
+                                    <div className="flex space-x-2">
+                                        <button
+                                            onClick={() => handleBulkAction('verify')}
+                                            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                                        >
+                                            Verify
+                                        </button>
+                                        <button
+                                            onClick={() => handleBulkAction('ban')}
+                                            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                                        >
+                                            Ban
+                                        </button>
+                                        <button
+                                            onClick={() => setSelectedUsers([])}
+                                            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </motion.div>
+
+                    {/* Users Table */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
+                    >
+                        {loading ? (
+                            <div className="p-12 text-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                                <p className="mt-4 text-gray-600">Loading users...</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50 border-b border-gray-200">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left">
+                                                <input
+                                                    type="checkbox"
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedUsers(usersData?.users?.map(u => u.user_id) || []);
+                                                        } else {
+                                                            setSelectedUsers([]);
+                                                        }
+                                                    }}
+                                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                            </th>
+                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                User
+                                            </th>
+                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Status
+                                            </th>
+                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Balance
+                                            </th>
+                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Earned
+                                            </th>
+                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Joined
+                                            </th>
+                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Actions
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {usersData?.users?.map((user, index) => (
+                                            <motion.tr
+                                                key={user.user_id}
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: index * 0.05 }}
+                                                className="hover:bg-gray-50 transition-colors"
+                                            >
+                                                <td className="px-6 py-4">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedUsers.includes(user.user_id)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setSelectedUsers([...selectedUsers, user.user_id]);
+                                                            } else {
+                                                                setSelectedUsers(selectedUsers.filter(id => id !== user.user_id));
+                                                            }
+                                                        }}
+                                                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                    />
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center space-x-3">
+                                                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                                                            {user.name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-gray-900">{user.name}</p>
+                                                            <p className="text-sm text-gray-500">@{user.username}</p>
+                                                            <p className="text-xs text-gray-400">ID: {user.user_id}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col space-y-1">
+                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                            user.device_verified 
+                                                                ? 'bg-green-100 text-green-800' 
+                                                                : 'bg-yellow-100 text-yellow-800'
+                                                        }`}>
+                                                            <i className={`fas fa-${user.device_verified ? 'check-circle' : 'clock'} mr-1`}></i>
+                                                            {user.device_verified ? 'Verified' : 'Pending'}
+                                                        </span>
+                                                        {user.is_banned && (
+                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                                <i className="fas fa-ban mr-1"></i>
+                                                                Banned
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="text-sm">
+                                                        <p className="font-medium text-gray-900">₹{user.wallet_balance.toFixed(2)}</p>
+                                                        <p className="text-gray-500">Current</p>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="text-sm">
+                                                        <p className="font-medium text-gray-900">₹{user.total_earned.toFixed(2)}</p>
+                                                        <p className="text-gray-500">{user.campaigns_completed} campaigns</p>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-gray-500">
+                                                    {new Date(user.created_at).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center space-x-2">
+                                                        <button className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors">
+                                                            <i className="fas fa-eye"></i>
+                                                        </button>
+                                                        <button className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors">
+                                                            <i className="fas fa-wallet"></i>
+                                                        </button>
+                                                        <button className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors">
+                                                            <i className="fas fa-ban"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </motion.tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* Pagination */}
+                        {usersData?.pagination && (
+                            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                                <div className="text-sm text-gray-500">
+                                    Showing {((usersData.pagination.current_page - 1) * usersData.pagination.limit) + 1} to{' '}
+                                    {Math.min(usersData.pagination.current_page * usersData.pagination.limit, usersData.pagination.total_count)} of{' '}
+                                    {usersData.pagination.total_count} results
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <button
+                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                        disabled={currentPage === 1}
+                                        className="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Previous
+                                    </button>
+                                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg font-medium">
+                                        {currentPage}
+                                    </span>
+                                    <button
+                                        onClick={() => setCurrentPage(prev => prev + 1)}
+                                        disabled={currentPage >= usersData.pagination.total_pages}
+                                        className="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </motion.div>
+                </div>
+            );
+        };
+
+        // 🎯 Campaign Management Component
+        const CampaignManagement = () => {
+            const api = useAPI();
+            const [showCreateModal, setShowCreateModal] = useState(false);
+            const [selectedCampaign, setSelectedCampaign] = useState(null);
+            
+            const { data: campaignsData, loading, refetch } = useData(api.getCampaigns);
+
+            const CampaignCard = ({ campaign, index }) => (
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden card-hover"
+                >
+                    <div className="p-6">
+                        <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center space-x-3">
+                                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center">
+                                    <i className="fas fa-bullhorn text-white text-xl"></i>
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-gray-900 text-lg">{campaign.name}</h3>
+                                    <p className="text-gray-600 text-sm">{campaign.category}</p>
+                                </div>
+                            </div>
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                campaign.status === 'active' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-800'
+                            }`}>
+                                {campaign.status}
+                            </span>
+                        </div>
+
+                        <p className="text-gray-600 mb-4 line-clamp-2">{campaign.description}</p>
+
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="text-center p-3 bg-blue-50 rounded-xl">
+                                <div className="text-2xl font-bold text-blue-600">₹{campaign.reward_amount}</div>
+                                <div className="text-sm text-blue-500">Reward</div>
+                            </div>
+                            <div className="text-center p-3 bg-green-50 rounded-xl">
+                                <div className="text-2xl font-bold text-green-600">{campaign.approved_submissions}</div>
+                                <div className="text-sm text-green-500">Approved</div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <div className="text-sm text-gray-500">
+                                {campaign.total_submissions} total submissions
+                            </div>
+                            <div className="flex space-x-2">
+                                <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                                    <i className="fas fa-edit mr-2"></i>
+                                    Edit
+                                </button>
+                                <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">
+                                    <i className="fas fa-chart-bar mr-2"></i>
+                                    Stats
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            );
+
+            return (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                                    <i className="fas fa-bullhorn text-purple-500 mr-3"></i>
+                                    Campaign Management
+                                </h2>
+                                <p className="text-gray-600 mt-1">Create and manage earning campaigns</p>
+                            </div>
+                            <button
+                                onClick={() => setShowCreateModal(true)}
+                                className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:from-purple-600 hover:to-pink-700 transition-all duration-200 flex items-center space-x-2 shadow-lg"
+                            >
+                                <i className="fas fa-plus"></i>
+                                <span>Create Campaign</span>
+                            </button>
+                        </div>
+                    </motion.div>
+
+                    {/* Campaigns Grid */}
+                    {loading ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                            {[1, 2, 3, 4, 5, 6].map((item) => (
+                                <div key={item} className="bg-white rounded-2xl shadow-lg p-6 animate-pulse">
+                                    <div className="flex items-center space-x-3 mb-4">
+                                        <div className="w-12 h-12 bg-gray-300 rounded-2xl"></div>
+                                        <div className="flex-1">
+                                            <div className="h-4 bg-gray-300 rounded mb-2"></div>
+                                            <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                                        </div>
+                                    </div>
+                                    <div className="h-3 bg-gray-200 rounded mb-2"></div>
+                                    <div className="h-3 bg-gray-200 rounded mb-4 w-3/4"></div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="h-16 bg-gray-100 rounded-xl"></div>
+                                        <div className="h-16 bg-gray-100 rounded-xl"></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                            {campaignsData?.campaigns?.map((campaign, index) => (
+                                <CampaignCard key={campaign.campaign_id} campaign={campaign} index={index} />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Create Campaign Modal */}
+                    <AnimatePresence>
+                        {showCreateModal && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+                                onClick={() => setShowCreateModal(false)}
+                            >
+                                <motion.div
+                                    initial={{ scale: 0.95, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    exit={{ scale: 0.95, opacity: 0 }}
+                                    className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-96 overflow-y-auto"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-xl font-bold text-gray-900">Create New Campaign</h3>
+                                        <button
+                                            onClick={() => setShowCreateModal(false)}
+                                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                        >
+                                            <i className="fas fa-times text-gray-500"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <form className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Campaign Name
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                                placeholder="Enter campaign name..."
+                                            />
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Description
+                                            </label>
+                                            <textarea
+                                                rows={3}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                                placeholder="Describe the campaign..."
+                                            ></textarea>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Reward Amount (₹)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                                    placeholder="5.00"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Category
+                                                </label>
+                                                <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                                    <option>App Install</option>
+                                                    <option>Survey</option>
+                                                    <option>Video Watch</option>
+                                                    <option>Social Media</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex justify-end space-x-4 pt-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowCreateModal(false)}
+                                                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-colors"
+                                            >
+                                                Create Campaign
+                                            </button>
+                                        </div>
+                                    </form>
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            );
+        };
+
+        // 📸 Screenshots Management Component
+        const ScreenshotsManagement = () => {
+            const api = useAPI();
+            const [statusFilter, setStatusFilter] = useState('pending');
+            const [selectedScreenshots, setSelectedScreenshots] = useState([]);
+
+            const { data: screenshotsData, loading, refetch } = useData(() => 
+                api.getScreenshots({ status: statusFilter }), 
+                [statusFilter]
+            );
+
+            const handleApprove = async (submissionId) => {
+                try {
+                    await api.approveScreenshot(submissionId, 'Approved by admin');
+                    await refetch();
+                } catch (error) {
+                    console.error('Approve error:', error);
+                }
+            };
+
+            const handleReject = async (submissionId) => {
+                try {
+                    await api.rejectScreenshot(submissionId, 'Does not meet requirements');
+                    await refetch();
+                } catch (error) {
+                    console.error('Reject error:', error);
+                }
+            };
+
+            const handleBulkApprove = async () => {
+                if (selectedScreenshots.length === 0) return;
+                
+                try {
+                    await api.bulkApproveScreenshots(selectedScreenshots);
+                    await refetch();
+                    setSelectedScreenshots([]);
+                } catch (error) {
+                    console.error('Bulk approve error:', error);
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
+                    >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                                    <i className="fas fa-camera text-orange-500 mr-3"></i>
+                                    Screenshot Management
+                                </h2>
+                                <p className="text-gray-600 mt-1">Review and approve user submissions</p>
+                            </div>
+                            
+                            <div className="flex items-center space-x-4">
+                                <select
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                >
+                                    <option value="pending">Pending Review</option>
+                                    <option value="approved">Approved</option>
+                                    <option value="rejected">Rejected</option>
+                                    <option value="all">All Screenshots</option>
+                                </select>
+                                
+                                {selectedScreenshots.length > 0 && (
+                                    <button
+                                        onClick={handleBulkApprove}
+                                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center space-x-2"
+                                    >
+                                        <i className="fas fa-check"></i>
+                                        <span>Bulk Approve ({selectedScreenshots.length})</span>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    {/* Screenshots Grid */}
+                    {loading ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                            {[1, 2, 3, 4, 5, 6].map((item) => (
+                                <div key={item} className="bg-white rounded-2xl shadow-lg p-6 animate-pulse">
+                                    <div className="w-full h-48 bg-gray-300 rounded-xl mb-4"></div>
+                                    <div className="h-4 bg-gray-300 rounded mb-2"></div>
+                                    <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                            {screenshotsData?.screenshots?.map((screenshot, index) => (
+                                <motion.div
+                                    key={screenshot.submission_id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: index * 0.1 }}
+                                    className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden card-hover"
+                                >
+                                    {/* Screenshot Image */}
+                                    <div className="relative">
+                                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
+                                            <i className="fas fa-image text-4xl text-gray-400"></i>
+                                        </div>
+                                        
+                                        {statusFilter === 'pending' && (
+                                            <div className="absolute top-2 left-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedScreenshots.includes(screenshot.submission_id)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedScreenshots([...selectedScreenshots, screenshot.submission_id]);
+                                                        } else {
+                                                            setSelectedScreenshots(selectedScreenshots.filter(id => id !== screenshot.submission_id));
+                                                        }
+                                                    }}
+                                                    className="w-5 h-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                                                />
+                                            </div>
+                                        )}
+                                        
+                                        <div className="absolute top-2 right-2">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                screenshot.status === 'pending' 
+                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                    : screenshot.status === 'approved'
+                                                    ? 'bg-green-100 text-green-800'
+                                                    : 'bg-red-100 text-red-800'
+                                            }`}>
+                                                {screenshot.status}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div>
+                                                <h3 className="font-semibold text-gray-900">{screenshot.campaign_name}</h3>
+                                                <p className="text-sm text-gray-600">by {screenshot.user_name}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-lg font-bold text-green-600">₹{screenshot.reward_amount}</div>
+                                                <div className="text-xs text-gray-500">reward</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="text-xs text-gray-500 mb-3">
+                                            Submitted: {new Date(screenshot.submitted_at).toLocaleDateString()}
+                                        </div>
+
+                                        {screenshot.status === 'pending' && (
+                                            <div className="flex space-x-2">
+                                                <button
+                                                    onClick={() => handleApprove(screenshot.submission_id)}
+                                                    className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+                                                >
+                                                    <i className="fas fa-check mr-1"></i>
+                                                    Approve
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReject(screenshot.submission_id)}
+                                                    className="flex-1 px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
+                                                >
+                                                    <i className="fas fa-times mr-1"></i>
+                                                    Reject
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {screenshot.admin_notes && (
+                                            <div className="mt-3 p-2 bg-gray-50 rounded-lg">
+                                                <p className="text-xs text-gray-600">{screenshot.admin_notes}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    )}
+
+                    {screenshotsData?.screenshots?.length === 0 && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="text-center py-12"
+                        >
+                            <div className="w-24 h-24 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                                <i className="fas fa-camera text-3xl text-gray-400"></i>
+                            </div>
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">No Screenshots Found</h3>
+                            <p className="text-gray-600">No screenshots match the current filter criteria.</p>
+                        </motion.div>
+                    )}
+                </div>
+            );
+        };
+
+        // 💸 Withdrawals Management Component
+        const WithdrawalsManagement = () => {
+            const api = useAPI();
+            const [statusFilter, setStatusFilter] = useState('pending');
+
+            const { data: withdrawalsData, loading, refetch } = useData(() => 
+                api.getWithdrawals({ status: statusFilter }), 
+                [statusFilter]
+            );
+
+            const handleApprove = async (requestId) => {
+                try {
+                    await api.approveWithdrawal(requestId, 'Approved by admin');
+                    await refetch();
+                } catch (error) {
+                    console.error('Approve error:', error);
+                }
+            };
+
+            const handleReject = async (requestId) => {
+                try {
+                    await api.rejectWithdrawal(requestId, 'Invalid payment details');
+                    await refetch();
+                } catch (error) {
+                    console.error('Reject error:', error);
+                }
+            };
+
+            const getPaymentMethodIcon = (method) => {
+                switch (method) {
+                    case 'upi': return 'fas fa-mobile-alt';
+                    case 'bank': return 'fas fa-university';
+                    case 'paytm': return 'fas fa-wallet';
+                    case 'amazon': return 'fas fa-gift';
+                    default: return 'fas fa-credit-card';
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
+                    >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                                    <i className="fas fa-money-bill-wave text-green-500 mr-3"></i>
+                                    Withdrawal Management
+                                </h2>
+                                <p className="text-gray-600 mt-1">Process user withdrawal requests</p>
+                            </div>
+                            
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                            >
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                                <option value="completed">Completed</option>
+                                <option value="all">All Requests</option>
+                            </select>
+                        </div>
+                    </motion.div>
+
+                    {/* Withdrawals List */}
+                    {loading ? (
+                        <div className="space-y-4">
+                            {[1, 2, 3, 4, 5].map((item) => (
+                                <div key={item} className="bg-white rounded-2xl shadow-lg p-6 animate-pulse">
+                                    <div className="flex items-center space-x-4">
+                                        <div className="w-12 h-12 bg-gray-300 rounded-full"></div>
+                                        <div className="flex-1">
+                                            <div className="h-4 bg-gray-300 rounded mb-2"></div>
+                                            <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                                        </div>
+                                        <div className="w-24 h-8 bg-gray-300 rounded"></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {withdrawalsData?.withdrawals?.map((withdrawal, index) => (
+                                <motion.div
+                                    key={withdrawal.request_id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: index * 0.1 }}
+                                    className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
+                                >
+                                    <div className="p-6">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center space-x-4">
+                                                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center">
+                                                    <i className={`${getPaymentMethodIcon(withdrawal.payment_method)} text-white`}></i>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-gray-900">₹{withdrawal.amount.toFixed(2)}</h3>
+                                                    <p className="text-gray-600 text-sm">{withdrawal.user_name} (@{withdrawal.user_username})</p>
+                                                    <p className="text-gray-500 text-xs">ID: {withdrawal.request_id}</p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="text-right">
+                                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                                    withdrawal.status === 'pending' 
+                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                        : withdrawal.status === 'approved'
+                                                        ? 'bg-green-100 text-green-800'
+                                                        : withdrawal.status === 'completed'
+                                                        ? 'bg-blue-100 text-blue-800'
+                                                        : 'bg-red-100 text-red-800'
+                                                }`}>
+                                                    {withdrawal.status}
+                                                </span>
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    {new Date(withdrawal.request_time).toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-gray-50 rounded-xl p-4 mb-4">
+                                            <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+                                                <i className={`${getPaymentMethodIcon(withdrawal.payment_method)} mr-2 text-gray-600`}></i>
+                                                {withdrawal.payment_method.toUpperCase()} Details
+                                            </h4>
+                                            <div className="text-sm text-gray-600 space-y-1">
+                                                {Object.entries(withdrawal.payment_details).map(([key, value]) => (
+                                                    <div key={key} className="flex justify-between">
+                                                        <span className="capitalize">{key.replace('_', ' ')}:</span>
+                                                        <span className="font-medium">{value}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {withdrawal.status === 'pending' && (
+                                            <div className="flex space-x-3">
+                                                <button
+                                                    onClick={() => handleApprove(withdrawal.request_id)}
+                                                    className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center space-x-2"
+                                                >
+                                                    <i className="fas fa-check"></i>
+                                                    <span>Approve & Process</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReject(withdrawal.request_id)}
+                                                    className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center space-x-2"
+                                                >
+                                                    <i className="fas fa-times"></i>
+                                                    <span>Reject</span>
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {withdrawal.admin_notes && (
+                                            <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                                                <p className="text-sm text-blue-800">
+                                                    <i className="fas fa-sticky-note mr-2"></i>
+                                                    {withdrawal.admin_notes}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    )}
+
+                    {withdrawalsData?.withdrawals?.length === 0 && (
+                                                <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="text-center py-12"
+                        >
+                            <div className="w-24 h-24 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                                <i className="fas fa-money-bill-wave text-3xl text-gray-400"></i>
+                            </div>
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">No Withdrawal Requests</h3>
+                            <p className="text-gray-600">No withdrawal requests match the current filter.</p>
+                        </motion.div>
+                    )}
+                </div>
+            );
+        };
+
+        // 🎁 Gift Codes Management Component
+        const GiftCodesManagement = () => {
+            const api = useAPI();
+            const [showCreateModal, setShowCreateModal] = useState(false);
+            const [amount, setAmount] = useState('');
+            const [quantity, setQuantity] = useState('');
+            const [expiryDays, setExpiryDays] = useState('30');
+
+            const { data: giftCodesData, loading, refetch } = useData(() => 
+                api.request('/api/admin/gift-codes')
+            );
+
+            const handleCreateGiftCodes = async (e) => {
+                e.preventDefault();
+                try {
+                    await api.request('/api/admin/gift-codes/generate', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            amount: parseFloat(amount),
+                            quantity: parseInt(quantity),
+                            expiry_days: parseInt(expiryDays)
+                        })
+                    });
+                    await refetch();
+                    setShowCreateModal(false);
+                    setAmount('');
+                    setQuantity('');
+                    setExpiryDays('30');
+                } catch (error) {
+                    console.error('Create gift codes error:', error);
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                                    <i className="fas fa-gift text-pink-500 mr-3"></i>
+                                    Gift Code Management
+                                </h2>
+                                <p className="text-gray-600 mt-1">Generate and manage gift codes</p>
+                            </div>
+                            <button
+                                onClick={() => setShowCreateModal(true)}
+                                className="px-6 py-3 bg-gradient-to-r from-pink-500 to-rose-600 text-white rounded-xl hover:from-pink-600 hover:to-rose-700 transition-all duration-200 flex items-center space-x-2 shadow-lg"
+                            >
+                                <i className="fas fa-plus"></i>
+                                <span>Generate Codes</span>
+                            </button>
+                        </div>
+                    </motion.div>
+
+                    {/* Statistics Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <StatsCard
+                            icon="fas fa-gift"
+                            title="Total Codes"
+                            value={giftCodesData?.gift_codes?.length?.toLocaleString() || '0'}
+                            color="from-pink-500 to-rose-600"
+                        />
+                        <StatsCard
+                            icon="fas fa-check-circle"
+                            title="Used Codes"
+                            value={giftCodesData?.gift_codes?.filter(c => c.is_used)?.length?.toLocaleString() || '0'}
+                            color="from-green-500 to-emerald-600"
+                        />
+                        <StatsCard
+                            icon="fas fa-clock"
+                            title="Active Codes"
+                            value={giftCodesData?.gift_codes?.filter(c => !c.is_used && !c.is_expired)?.length?.toLocaleString() || '0'}
+                            color="from-blue-500 to-cyan-600"
+                        />
+                        <StatsCard
+                            icon="fas fa-rupee-sign"
+                            title="Total Value"
+                            value={`₹${giftCodesData?.gift_codes?.reduce((sum, code) => sum + code.amount, 0)?.toLocaleString() || '0'}`}
+                            color="from-purple-500 to-violet-600"
+                        />
+                    </div>
+
+                    {/* Gift Codes Table */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
+                    >
+                        <div className="p-6 border-b border-gray-100">
+                            <h3 className="text-lg font-semibold text-gray-900">Recent Gift Codes</h3>
+                        </div>
+                        
+                        {loading ? (
+                            <div className="p-12 text-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto"></div>
+                                <p className="mt-4 text-gray-600">Loading gift codes...</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Used By</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expires</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {giftCodesData?.gift_codes?.slice(0, 10).map((code, index) => (
+                                            <motion.tr
+                                                key={code.code}
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: index * 0.05 }}
+                                                className="hover:bg-gray-50"
+                                            >
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="font-mono text-sm font-medium text-gray-900 bg-gray-100 px-2 py-1 rounded">
+                                                        {code.code}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm font-medium text-gray-900">₹{code.amount}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                        code.is_used 
+                                                            ? 'bg-green-100 text-green-800'
+                                                            : code.is_expired
+                                                            ? 'bg-red-100 text-red-800'
+                                                            : 'bg-blue-100 text-blue-800'
+                                                    }`}>
+                                                        {code.is_used ? 'Used' : code.is_expired ? 'Expired' : 'Active'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {code.used_by_name || '-'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {new Date(code.expires_at).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    <button className="text-red-600 hover:text-red-900">
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </motion.div>
+
+                    {/* Create Gift Codes Modal */}
+                    <AnimatePresence>
+                        {showCreateModal && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+                                onClick={() => setShowCreateModal(false)}
+                            >
+                                <motion.div
+                                    initial={{ scale: 0.95, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    exit={{ scale: 0.95, opacity: 0 }}
+                                    className="bg-white rounded-2xl p-6 w-full max-w-md"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-xl font-bold text-gray-900">Generate Gift Codes</h3>
+                                        <button
+                                            onClick={() => setShowCreateModal(false)}
+                                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                        >
+                                            <i className="fas fa-times text-gray-500"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <form onSubmit={handleCreateGiftCodes} className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Amount per Code (₹)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={amount}
+                                                onChange={(e) => setAmount(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                                                placeholder="10.00"
+                                                step="0.01"
+                                                required
+                                            />
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Quantity
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={quantity}
+                                                onChange={(e) => setQuantity(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                                                placeholder="100"
+                                                min="1"
+                                                max="1000"
+                                                required
+                                            />
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Expiry (Days)
+                                            </label>
+                                            <select
+                                                value={expiryDays}
+                                                onChange={(e) => setExpiryDays(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                                            >
+                                                <option value="7">7 days</option>
+                                                <option value="30">30 days</option>
+                                                <option value="60">60 days</option>
+                                                <option value="90">90 days</option>
+                                                <option value="365">1 year</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div className="bg-blue-50 rounded-lg p-4">
+                                            <div className="flex items-center space-x-2 text-blue-800">
+                                                <i className="fas fa-info-circle"></i>
+                                                <span className="font-medium">Summary</span>
+                                            </div>
+                                            <div className="text-sm text-blue-700 mt-2">
+                                                <p>Total Value: ₹{(parseFloat(amount || 0) * parseInt(quantity || 0)).toFixed(2)}</p>
+                                                <p>Codes: {quantity || 0}</p>
+                                                <p>Amount each: ₹{amount || 0}</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex justify-end space-x-4 pt-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowCreateModal(false)}
+                                                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                className="px-6 py-2 bg-gradient-to-r from-pink-500 to-rose-600 text-white rounded-lg hover:from-pink-600 hover:to-rose-700 transition-colors"
+                                            >
+                                                Generate Codes
+                                            </button>
+                                        </div>
+                                    </form>
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            );
+        };
+
+        // 📊 Analytics Component
+        const AnalyticsSection = () => {
+            const api = useAPI();
+            const { data: analyticsData, loading } = useData(api.getDashboard);
+
+            // Sample analytics data
+            const revenueData = [
+                { name: 'Jan', revenue: 4000, users: 240 },
+                { name: 'Feb', revenue: 3000, users: 139 },
+                { name: 'Mar', revenue: 2000, users: 980 },
+                { name: 'Apr', revenue: 2780, users: 390 },
+                { name: 'May', revenue: 1890, users: 480 },
+                { name: 'Jun', revenue: 2390, users: 380 },
+                { name: 'Jul', revenue: 3490, users: 430 }
+            ];
+
+            const userGrowthData = [
+                { name: 'Week 1', verified: 120, unverified: 80 },
+                { name: 'Week 2', verified: 150, unverified: 90 },
+                { name: 'Week 3', verified: 180, unverified: 70 },
+                { name: 'Week 4', verified: 220, unverified: 60 }
+            ];
+
+            const earningsDistribution = [
+                { name: 'Campaigns', value: 45, amount: 4500 },
+                { name: 'Referrals', value: 30, amount: 3000 },
+                { name: 'Gift Codes', value: 15, amount: 1500 },
+                { name: 'Bonuses', value: 10, amount: 1000 }
+            ];
+
+            if (loading) {
+                return (
+                    <div className="space-y-6">
+                        {[1, 2, 3].map((item) => (
+                            <div key={item} className="bg-white rounded-2xl shadow-lg p-6 animate-pulse">
+                                <div className="h-6 bg-gray-300 rounded mb-4 w-1/3"></div>
+                                <div className="h-64 bg-gray-200 rounded"></div>
                             </div>
                         ))}
                     </div>
-                    
-                    <div className="content-section">
-                        <h2 className="section-title">
-                            <i className="fas fa-chart-line"></i>
-                            System Status
+                );
+            }
+
+            return (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
+                    >
+                        <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                            <i className="fas fa-chart-pie text-cyan-500 mr-3"></i>
+                            Analytics & Reports
                         </h2>
-                        <div className="table">
-                            <table className="table">
-                                <tbody>
-                                    <tr>
-                                        <td>Database Connection</td>
-                                        <td>
-                                            <span className={`badge ${data.system_status?.database_connected ? 'badge-success' : 'badge-danger'}`}>
-                                                {data.system_status?.database_connected ? 'Connected' : 'Disconnected'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Bot Status</td>
-                                        <td>
-                                            <span className={`badge ${data.system_status?.bot_initialized ? 'badge-success' : 'badge-danger'}`}>
-                                                {data.system_status?.bot_initialized ? 'Active' : 'Inactive'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Recent Users (7 days)</td>
-                                        <td>{data.overview?.recent_users || 0}</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Pending Withdrawals</td>
-                                        <td>₹{(data.wallet?.pending_withdrawals || 0).toFixed(2)}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <p className="text-gray-600 mt-1">Comprehensive business insights and metrics</p>
+                    </motion.div>
+
+                    {/* Quick Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <StatsCard
+                            icon="fas fa-chart-line"
+                            title="Revenue Growth"
+                            value="+23.5%"
+                            change="+2.1%"
+                            changeType="increase"
+                            color="from-green-500 to-emerald-600"
+                        />
+                        <StatsCard
+                            icon="fas fa-users"
+                            title="User Growth"
+                            value="+18.2%"
+                            change="+5.4%"
+                            changeType="increase"
+                            color="from-blue-500 to-cyan-600"
+                        />
+                        <StatsCard
+                            icon="fas fa-wallet"
+                            title="Avg. Wallet"
+                            value="₹127.50"
+                            change="+12.3%"
+                            changeType="increase"
+                            color="from-purple-500 to-violet-600"
+                        />
+                        <StatsCard
+                            icon="fas fa-percentage"
+                            title="Completion Rate"
+                            value="87.3%"
+                            change="+3.2%"
+                            changeType="increase"
+                            color="from-orange-500 to-amber-600"
+                        />
+                    </div>
+
+                    {/* Charts Grid */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                        {/* Revenue Trend */}
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.2 }}
+                            className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+                        >
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                                <i className="fas fa-chart-area text-green-500 mr-2"></i>
+                                Revenue & User Growth
+                            </h3>
+                            <ResponsiveContainer width="100%" height={350}>
+                                <AreaChart data={revenueData}>
+                                    <defs>
+                                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                        </linearGradient>
+                                        <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
+                                    <YAxis stroke="#64748b" fontSize={12} />
+                                    <Tooltip 
+                                        contentStyle={{
+                                            backgroundColor: 'white',
+                                            border: 'none',
+                                            borderRadius: '12px',
+                                            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                                        }}
+                                    />
+                                    <Area 
+                                        type="monotone" 
+                                        dataKey="revenue" 
+                                        stroke="#10b981" 
+                                        fillOpacity={1} 
+                                        fill="url(#colorRevenue)" 
+                                        strokeWidth={3}
+                                    />
+                                    <Area 
+                                        type="monotone" 
+                                        dataKey="users" 
+                                        stroke="#3b82f6" 
+                                        fillOpacity={1} 
+                                        fill="url(#colorUsers)" 
+                                        strokeWidth={3}
+                                    />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </motion.div>
+
+                        {/* Earnings Distribution */}
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.3 }}
+                            className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+                        >
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                                <i className="fas fa-chart-pie text-purple-500 mr-2"></i>
+                                Earnings Distribution
+                            </h3>
+                            <ResponsiveContainer width="100%" height={350}>
+                                <PieChart>
+                                    <Pie
+                                        data={earningsDistribution}
+                                        cx="50%"
+                                        cy="50%"
+                                        outerRadius={100}
+                                        dataKey="value"
+                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                    >
+                                        {earningsDistribution.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b'][index]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip 
+                                        formatter={(value, name) => [`₹${earningsDistribution.find(e => e.name === name)?.amount}`, name]}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </motion.div>
+                    </div>
+
+                    {/* User Verification Trends */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4 }}
+                        className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+                    >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                            <i className="fas fa-user-check text-blue-500 mr-2"></i>
+                            User Verification Trends
+                        </h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={userGrowthData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
+                                <YAxis stroke="#64748b" fontSize={12} />
+                                <Tooltip 
+                                    contentStyle={{
+                                        backgroundColor: 'white',
+                                        border: 'none',
+                                        borderRadius: '12px',
+                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                                    }}
+                                />
+                                <Bar dataKey="verified" fill="#10b981" radius={[4, 4, 0, 0]} name="Verified Users" />
+                                <Bar dataKey="unverified" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Unverified Users" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </motion.div>
+
+                    {/* Performance Metrics */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.5 }}
+                            className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+                        >
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className="font-semibold text-gray-900">Campaign Performance</h4>
+                                <i className="fas fa-bullhorn text-purple-500"></i>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Completion Rate</span>
+                                    <span className="font-semibold text-green-600">87.3%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div className="bg-green-500 h-2 rounded-full" style={{width: '87.3%'}}></div>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Avg. Reward</span>
+                                    <span className="font-semibold text-gray-900">₹12.50</span>
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.6 }}
+                            className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+                        >
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className="font-semibold text-gray-900">Referral Metrics</h4>
+                                <i className="fas fa-share-alt text-blue-500"></i>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Conversion Rate</span>
+                                    <span className="font-semibold text-blue-600">23.1%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div className="bg-blue-500 h-2 rounded-full" style={{width: '23.1%'}}></div>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Avg. per User</span>
+                                    <span className="font-semibold text-gray-900">2.3 refs</span>
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.7 }}
+                            className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+                        >
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className="font-semibold text-gray-900">Withdrawal Stats</h4>
+                                <i className="fas fa-money-bill-wave text-green-500"></i>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Success Rate</span>
+                                    <span className="font-semibold text-green-600">94.7%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div className="bg-green-500 h-2 rounded-full" style={{width: '94.7%'}}></div>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Avg. Processing</span>
+                                    <span className="font-semibold text-gray-900">4.2 hrs</span>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ⚙️ Settings Component
+        const SettingsSection = () => {
+            const api = useAPI();
+            const [settings, setSettings] = useState({
+                general: {
+                    screenshot_reward: '5.00',
+                    min_withdrawal: '10.00',
+                    referral_bonus: '10.00',
+                    payment_mode: 'manual'
+                },
+                payment_gateways: {
+                    razorpay: { enabled: false, api_key: '' },
+                    paytm: { enabled: false, api_key: '' },
+                    upi: { enabled: true, api_key: '' }
+                }
+            });
+
+            const { data: settingsData, loading, refetch } = useData(() => 
+                api.request('/api/admin/settings')
+            );
+
+            useEffect(() => {
+                if (settingsData) {
+                    setSettings(settingsData);
+                }
+            }, [settingsData]);
+
+            const handleSaveSettings = async () => {
+                try {
+                    await api.request('/api/admin/settings', {
+                        method: 'POST',
+                        body: JSON.stringify(settings)
+                    });
+                    await refetch();
+                } catch (error) {
+                    console.error('Save settings error:', error);
+                }
+            };
+
+            if (loading) {
+                return (
+                    <div className="space-y-6">
+                        {[1, 2, 3].map((item) => (
+                            <div key={item} className="bg-white rounded-2xl shadow-lg p-6 animate-pulse">
+                                <div className="h-6 bg-gray-300 rounded mb-4 w-1/4"></div>
+                                <div className="space-y-3">
+                                    <div className="h-4 bg-gray-200 rounded"></div>
+                                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                );
+            }
+
+            return (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                                    <i className="fas fa-cog text-gray-500 mr-3"></i>
+                                    Bot Settings
+                                </h2>
+                                <p className="text-gray-600 mt-1">Configure bot behavior and features</p>
+                            </div>
+                            <button
+                                onClick={handleSaveSettings}
+                                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-2 shadow-lg"
+                            >
+                                <i className="fas fa-save"></i>
+                                <span>Save Settings</span>
+                            </button>
+                        </div>
+                    </motion.div>
+
+                    {/* General Settings */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                        className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+                    >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                            <i className="fas fa-sliders-h text-blue-500 mr-2"></i>
+                            General Settings
+                        </h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Screenshot Reward (₹)
+                                </label>
+                                <input
+                                    type="number"
+                                    value={settings.general?.screenshot_reward || ''}
+                                    onChange={(e) => setSettings(prev => ({
+                                        ...prev,
+                                        general: { ...prev.general, screenshot_reward: e.target.value }
+                                    }))}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    step="0.01"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Minimum Withdrawal (₹)
+                                </label>
+                                <input
+                                    type="number"
+                                    value={settings.general?.min_withdrawal || ''}
+                                    onChange={(e) => setSettings(prev => ({
+                                        ...prev,
+                                        general: { ...prev.general, min_withdrawal: e.target.value }
+                                    }))}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    step="0.01"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Referral Bonus (₹)
+                                </label>
+                                <input
+                                    type="number"
+                                    value={settings.general?.referral_bonus || ''}
+                                    onChange={(e) => setSettings(prev => ({
+                                        ...prev,
+                                        general: { ...prev.general, referral_bonus: e.target.value }
+                                    }))}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    step="0.01"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Payment Mode
+                                </label>
+                                <select
+                                    value={settings.general?.payment_mode || 'manual'}
+                                    onChange={(e) => setSettings(prev => ({
+                                        ...prev,
+                                        general: { ...prev.general, payment_mode: e.target.value }
+                                    }))}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="manual">Manual Approval</option>
+                                    <option value="automatic">Automatic Processing</option>
+                                </select>
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    {/* Payment Gateways */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+                    >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                            <i className="fas fa-credit-card text-green-500 mr-2"></i>
+                            Payment Gateways
+                        </h3>
+                        
+                        <div className="space-y-6">
+                            {/* Razorpay */}
+                            <div className="border border-gray-200 rounded-xl p-4">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                            <i className="fab fa-razorpay text-blue-600 text-xl"></i>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-medium text-gray-900">Razorpay</h4>
+                                            <p className="text-sm text-gray-500">UPI, Cards, Net Banking</p>
+                                        </div>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={settings.payment_gateways?.razorpay?.enabled || false}
+                                            onChange={(e) => setSettings(prev => ({
+                                                ...prev,
+                                                payment_gateways: {
+                                                    ...prev.payment_gateways,
+                                                    razorpay: { ...prev.payment_gateways?.razorpay, enabled: e.target.checked }
+                                                }
+                                            }))}
+                                            className="sr-only"
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                                
+                                {settings.payment_gateways?.razorpay?.enabled && (
+                                    <div className="space-y-3">
+                                        <input
+                                            type="text"
+                                            placeholder="API Key"
+                                            value={settings.payment_gateways?.razorpay?.api_key || ''}
+                                            onChange={(e) => setSettings(prev => ({
+                                                ...prev,
+                                                payment_gateways: {
+                                                    ...prev.payment_gateways,
+                                                    razorpay: { ...prev.payment_gateways?.razorpay, api_key: e.target.value }
+                                                }
+                                            }))}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* PayTM */}
+                            <div className="border border-gray-200 rounded-xl p-4">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                            <i className="fas fa-wallet text-blue-600 text-xl"></i>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-medium text-gray-900">PayTM</h4>
+                                            <p className="text-sm text-gray-500">Wallet payments</p>
+                                        </div>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={settings.payment_gateways?.paytm?.enabled || false}
+                                            onChange={(e) => setSettings(prev => ({
+                                                ...prev,
+                                                payment_gateways: {
+                                                    ...prev.payment_gateways,
+                                                    paytm: { ...prev.payment_gateways?.paytm, enabled: e.target.checked }
+                                                }
+                                            }))}
+                                            className="sr-only"
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                                
+                                {settings.payment_gateways?.paytm?.enabled && (
+                                    <div className="space-y-3">
+                                        <input
+                                            type="text"
+                                            placeholder="Merchant ID"
+                                            value={settings.payment_gateways?.paytm?.api_key || ''}
+                                            onChange={(e) => setSettings(prev => ({
+                                                ...prev,
+                                                payment_gateways: {
+                                                    ...prev.payment_gateways,
+                                                    paytm: { ...prev.payment_gateways?.paytm, api_key: e.target.value }
+                                                }
+                                            }))}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    {/* System Status */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+                    >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                            <i className="fas fa-server text-purple-500 mr-2"></i>
+                            System Status
+                        </h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="text-center p-4 bg-green-50 rounded-xl">
+                                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <i className="fas fa-database text-white"></i>
+                                </div>
+                                <h4 className="font-medium text-gray-900">Database</h4>
+                                <p className="text-sm text-green-600 font-medium">Connected</p>
+                            </div>
+                            
+                            <div className="text-center p-4 bg-green-50 rounded-xl">
+                                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <i className="fas fa-robot text-white"></i>
+                                </div>
+                                <h4 className="font-medium text-gray-900">Bot</h4>
+                                <p className="text-sm text-green-600 font-medium">Active</p>
+                            </div>
+                            
+                            <div className="text-center p-4 bg-green-50 rounded-xl">
+                                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <i className="fas fa-link text-white"></i>
+                                </div>
+                                <h4 className="font-medium text-gray-900">Webhook</h4>
+                                <p className="text-sm text-green-600 font-medium">Active</p>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            );
+        };
+
+        // 🎛️ Main Admin App Component
+        const AdminApp = () => {
+            const [currentSection, setCurrentSection] = useState('dashboard');
+            const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+            const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+            useEffect(() => {
+                const handleResize = () => {
+                    setIsMobile(window.innerWidth < 1024);
+                    if (window.innerWidth >= 1024) {
+                        setIsMobileMenuOpen(false);
+                    }
+                };
+
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
+
+            const getSectionTitle = () => {
+                const titles = {
+                    dashboard: 'Dashboard',
+                    users: 'User Management',
+                    campaigns: 'Campaign Management',
+                    screenshots: 'Screenshot Management',
+                    withdrawals: 'Withdrawal Management',
+                    'gift-codes': 'Gift Code Management',
+                    analytics: 'Analytics & Reports',
+                    settings: 'Settings'
+                };
+                return titles[currentSection] || 'Dashboard';
+            };
+
+            const renderSection = () => {
+                switch (currentSection) {
+                    case 'dashboard':
+                        return <DashboardOverview />;
+                    case 'users':
+                        return <UsersManagement />;
+                    case 'campaigns':
+                        return <CampaignManagement />;
+                    case 'screenshots':
+                        return <ScreenshotsManagement />;
+                    case 'withdrawals':
+                        return <WithdrawalsManagement />;
+                    case 'gift-codes':
+                        return <GiftCodesManagement />;
+                    case 'analytics':
+                        return <AnalyticsSection />;
+                    case 'settings':
+                        return <SettingsSection />;
+                    default:
+                        return <DashboardOverview />;
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    {/* Mobile Menu Overlay */}
+                    <AnimatePresence>
+                        {isMobile && isMobileMenuOpen && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            />
+                        )}
+                    </AnimatePresence>
+
+                    <div className="flex">
+                        {/* Sidebar */}
+                        {!isMobile ? (
+                            <ModernSidebar
+                                currentSection={currentSection}
+                                setCurrentSection={setCurrentSection}
+                                isMobile={false}
+                                setIsMobileMenuOpen={setIsMobileMenuOpen}
+                            />
+                        ) : (
+                            <AnimatePresence>
+                                {isMobileMenuOpen && (
+                                    <ModernSidebar
+                                        currentSection={currentSection}
+                                        setCurrentSection={setCurrentSection}
+                                        isMobile={true}
+                                        setIsMobileMenuOpen={setIsMobileMenuOpen}
+                                    />
+                                )}
+                            </AnimatePresence>
+                        )}
+
+                        {/* Main Content */}
+                        <div className={`flex-1 ${!isMobile ? 'ml-0' : ''}`}>
+                            {/* Mobile Header */}
+                            {isMobile && (
+                                <MobileHeader
+                                    title={getSectionTitle()}
+                                    setIsMobileMenuOpen={setIsMobileMenuOpen}
+                                />
+                            )}
+
+                            {/* Desktop Header */}
+                            {!isMobile && (
+                                <motion.header
+                                    initial={{ y: -50, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    className="bg-white shadow-sm border-b border-gray-200 p-6"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h1 className="text-3xl font-bold text-gray-900">{getSectionTitle()}</h1>
+                                            <p className="text-gray-600 mt-1">Enterprise Wallet Bot Administration</p>
+                                        </div>
+                                        <div className="flex items-center space-x-4">
+                                            <button className="p-3 bg-blue-100 text-blue-600 rounded-xl hover:bg-blue-200 transition-colors">
+                                                <i className="fas fa-bell"></i>
+                                            </button>
+                                            <button
+                                                onClick={() => window.location.reload()}
+                                                className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center space-x-2"
+                                            >
+                                                <i className="fas fa-sync-alt"></i>
+                                                <span>Refresh</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </motion.header>
+                            )}
+
+                            {/* Content Area */}
+                            <main className="p-6 custom-scrollbar overflow-y-auto" style={{ height: isMobile ? 'calc(100vh - 80px)' : 'calc(100vh - 120px)' }}>
+                                <div className="max-w-7xl mx-auto">
+                                    {renderSection()}
+                                </div>
+                            </main>
                         </div>
                     </div>
                 </div>
             );
-        }
-        
-        // Placeholder components for other sections
-        function UsersSection() {
-            return (
-                <div className="content-section">
-                    <h2 className="section-title">
-                        <i className="fas fa-users"></i>
-                        User Management
-                    </h2>
-                    <p>User management interface will be implemented here.</p>
-                    <button className="btn btn-primary">
-                        <i className="fas fa-plus"></i>
-                        Add User
-                    </button>
-                </div>
-            );
-        }
-        
-        function CampaignsSection() {
-            return (
-                <div className="content-section">
-                    <h2 className="section-title">
-                        <i className="fas fa-bullhorn"></i>
-                        Campaign Management
-                    </h2>
-                    <p>Campaign management interface will be implemented here.</p>
-                    <button className="btn btn-primary">
-                        <i className="fas fa-plus"></i>
-                        Create Campaign
-                    </button>
-                </div>
-            );
-        }
-        
-        function ScreenshotsSection() {
-            return (
-                <div className="content-section">
-                    <h2 className="section-title">
-                        <i className="fas fa-camera"></i>
-                        Screenshot Approval
-                    </h2>
-                    <p>Screenshot approval interface will be implemented here.</p>
-                </div>
-            );
-        }
-        
-        function WithdrawalsSection() {
-            return (
-                <div className="content-section">
-                    <h2 className="section-title">
-                        <i className="fas fa-money-bill-wave"></i>
-                        Withdrawal Management
-                    </h2>
-                    <p>Withdrawal management interface will be implemented here.</p>
-                </div>
-            );
-        }
-        
-        // Render the main component
-        ReactDOM.render(<AdminDashboard />, document.getElementById('root'));
+        };
+
+        // 🚀 Render the App
+        ReactDOM.render(<AdminApp />, document.getElementById('root'));
     </script>
 </body>
 </html>
-    """
+"""
     
     return HTMLResponse(content=html_content)
 
