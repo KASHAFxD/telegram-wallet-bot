@@ -7064,10 +7064,22 @@ async def admin_dashboard_page():
     <title>Enterprise Wallet Bot - Admin Dashboard</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/framer-motion@10/dist/framer-motion.js"></script>
+    # <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/framer-motion@6.5.1/dist/framer-motion.js"></script>
+<script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+
     <script src="https://unpkg.com/recharts@2.8.0/umd/Recharts.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    # <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS CDN (for development only) -->
+<link href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css" rel="stylesheet">
+
+<!-- Use precompiled React for production -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+<!-- Babel - only for development -->
+<script src="https://unpkg.com/@babel/standalone@7.22.5/babel.min.js"></script>
+
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <script>
@@ -7935,126 +7947,128 @@ async def admin_dashboard_page():
                         ) : (
                             <div className="overflow-x-auto">
                                 <table className="w-full">
-                                    <thead className="bg-gray-50 border-b border-gray-200">
-                                        <tr>
-                                            <th className="px-6 py-4 text-left">
-                                                <input
-                                                    type="checkbox"
-                                                    onChange={(e) => {
-                                                        if (e.target.checked) {
-                                                            setSelectedUsers(usersData?.users?.map(u => u.user_id) || []);
-                                                        } else {
-                                                            setSelectedUsers([]);
-                                                        }
-                                                    }}
-                                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                                />
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                User
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                Status
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                Balance
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                Earned
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                Joined
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                Actions
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {usersData?.users?.map((user, index) => (
-                                            <motion.tr
-                                                key={user.user_id}
-                                                initial={{ opacity: 0, y: 20 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                transition={{ delay: index * 0.05 }}
-                                                className="hover:bg-gray-50 transition-colors"
-                                            >
-                                                <td className="px-6 py-4">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedUsers.includes(user.user_id)}
-                                                        onChange={(e) => {
-                                                            if (e.target.checked) {
-                                                                setSelectedUsers([...selectedUsers, user.user_id]);
-                                                            } else {
-                                                                setSelectedUsers(selectedUsers.filter(id => id !== user.user_id));
-                                                            }
-                                                        }}
-                                                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                                    />
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center space-x-3">
-                                                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                                                            {user.name.charAt(0).toUpperCase()}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-medium text-gray-900">{user.name}</p>
-                                                            <p className="text-sm text-gray-500">@{user.username}</p>
-                                                            <p className="text-xs text-gray-400">ID: {user.user_id}</p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex flex-col space-y-1">
-                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                            user.device_verified 
-                                                                ? 'bg-green-100 text-green-800' 
-                                                                : 'bg-yellow-100 text-yellow-800'
-                                                        }`}>
-                                                            <i className={`fas fa-${user.device_verified ? 'check-circle' : 'clock'} mr-1`}></i>
-                                                            {user.device_verified ? 'Verified' : 'Pending'}
-                                                        </span>
-                                                        {user.is_banned && (
-                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                                                <i className="fas fa-ban mr-1"></i>
-                                                                Banned
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm">
-                                                        <p className="font-medium text-gray-900">₹{user.wallet_balance.toFixed(2)}</p>
-                                                        <p className="text-gray-500">Current</p>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm">
-                                                        <p className="font-medium text-gray-900">₹{user.total_earned.toFixed(2)}</p>
-                                                        <p className="text-gray-500">{user.campaigns_completed} campaigns</p>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-sm text-gray-500">
-                                                    {new Date(user.created_at).toLocaleDateString()}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center space-x-2">
-                                                        <button className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors">
-                                                            <i className="fas fa-eye"></i>
-                                                        </button>
-                                                        <button className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors">
-                                                            <i className="fas fa-wallet"></i>
-                                                        </button>
-                                                        <button className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors">
-                                                            <i className="fas fa-ban"></i>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </motion.tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                    <table className="w-full">
+    <thead className="bg-gray-50 border-b border-gray-200">
+        <tr>
+            <th className="px-6 py-4 text-left">
+                <input
+                    type="checkbox"
+                    onChange={(e) => {
+                        if (e.target.checked) {
+                            setSelectedUsers(usersData?.users?.map(u => u.user_id) || []);
+                        } else {
+                            setSelectedUsers([]);
+                        }
+                    }}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                User
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Status
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Balance
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Earned
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Joined
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+            </th>
+        </tr>
+    </thead>
+    <tbody className="bg-white divide-y divide-gray-200">
+        {usersData?.users?.map((user, index) => (
+            <motion.tr
+                key={user.user_id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="hover:bg-gray-50 transition-colors"
+            >
+                <td className="px-6 py-4">
+                    <input
+                        type="checkbox"
+                        checked={selectedUsers.includes(user.user_id)}
+                        onChange={(e) => {
+                            if (e.target.checked) {
+                                setSelectedUsers([...selectedUsers, user.user_id]);
+                            } else {
+                                setSelectedUsers(selectedUsers.filter(id => id !== user.user_id));
+                            }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                </td>
+                <td className="px-6 py-4">
+                    <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                            {user.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <p className="font-medium text-gray-900">{user.name}</p>
+                            <p className="text-sm text-gray-500">@{user.username}</p>
+                            <p className="text-xs text-gray-400">ID: {user.user_id}</p>
+                        </div>
+                    </div>
+                </td>
+                <td className="px-6 py-4">
+                    <div className="flex flex-col space-y-1">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            user.device_verified 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                            <i className={`fas fa-${user.device_verified ? 'check-circle' : 'clock'} mr-1`}></i>
+                            {user.device_verified ? 'Verified' : 'Pending'}
+                        </span>
+                        {user.is_banned && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                <i className="fas fa-ban mr-1"></i>
+                                Banned
+                            </span>
+                        )}
+                    </div>
+                </td>
+                <td className="px-6 py-4">
+                    <div className="text-sm">
+                        <p className="font-medium text-gray-900">₹{user.wallet_balance.toFixed(2)}</p>
+                        <p className="text-gray-500">Current</p>
+                    </div>
+                </td>
+                <td className="px-6 py-4">
+                    <div className="text-sm">
+                        <p className="font-medium text-gray-900">₹{user.total_earned.toFixed(2)}</p>
+                        <p className="text-gray-500">{user.campaigns_completed} campaigns</p>
+                    </div>
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-500">
+                    {new Date(user.created_at).toLocaleDateString()}
+                </td>
+                <td className="px-6 py-4">
+                    <div className="flex items-center space-x-2">
+                        <button className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors">
+                            <i className="fas fa-eye"></i>
+                        </button>
+                        <button className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors">
+                            <i className="fas fa-wallet"></i>
+                        </button>
+                        <button className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors">
+                            <i className="fas fa-ban"></i>
+                        </button>
+                    </div>
+                </td>
+            </motion.tr>
+        ))}
+    </tbody>
+</table>
+
                             </div>
                         )}
 
