@@ -6994,38 +6994,57 @@ async def admin_panel_login():
 
     <script>
         async function handleLogin(event) {
-            event.preventDefault();
-            
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            const errorDiv = document.getElementById('error');
-            
-            try {
-                // Create basic auth header
-                const credentials = btoa(username + ':' + password);
-                
-                const response = await fetch('/api/admin/dashboard', {
-                    headers: {
-                        'Authorization': 'Basic ' + credentials
-                    }
-                });
-                
-                if (response.ok) {
-                    // Store credentials for subsequent requests
-                    sessionStorage.setItem('adminAuth', credentials);
-                    
-                    // Redirect to admin dashboard
-                    window.location.href = '/admin/dashboard';
-                } else {
-                    errorDiv.style.display = 'block';
-                    errorDiv.textContent = 'Invalid credentials. Please try again.';
-                }
-                
-            } catch (error) {
-                errorDiv.style.display = 'block';
-                errorDiv.textContent = 'Connection error. Please try again.';
+    event.preventDefault();
+    
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const errorDiv = document.getElementById('error');
+    
+    if (!username || !password) {
+        errorDiv.style.display = 'block';
+        errorDiv.textContent = 'Please enter both username and password.';
+        return;
+    }
+    
+    try {
+        // Create basic auth header
+        const credentials = btoa(username + ':' + password);
+        console.log('Attempting login with credentials');
+        
+        const response = await fetch('/api/admin/dashboard', {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Basic ' + credentials,
+                'Content-Type': 'application/json'
             }
+        });
+        
+        console.log('Response status:', response.status);
+        
+        if (response.ok) {
+            // Store credentials for subsequent requests
+            sessionStorage.setItem('adminAuth', credentials);
+            console.log('Auth stored successfully');
+            
+            // Small delay to ensure storage
+            setTimeout(() => {
+                console.log('Redirecting to dashboard');
+                window.location.href = '/admin/dashboard';
+            }, 500);
+        } else {
+            const errorText = await response.text();
+            console.error('Login failed:', errorText);
+            errorDiv.style.display = 'block';
+            errorDiv.textContent = 'Invalid credentials. Please try again.';
         }
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        errorDiv.style.display = 'block';
+        errorDiv.textContent = 'Connection error. Please check your internet connection.';
+    }
+}
+
     </script>
 </body>
 </html>
@@ -7179,36 +7198,53 @@ async def admin_dashboard_page():
 
         // 🔧 API Management
         const useAPI = () => {
-            const [auth, setAuth] = useState(sessionStorage.getItem('adminAuth'));
+    const getAuth = () => sessionStorage.getItem('adminAuth');
+    
+    const request = useCallback(async (url, options = {}) => {
+        const currentAuth = getAuth();
+        
+        if (!currentAuth && !url.includes('/auth')) {
+            console.log('No auth found, redirecting to login');
+            window.location.href = '/admin';
+            return null;
+        }
+        
+        try {
+            console.log('Making API request to:', url);
             
-            const request = useCallback(async (url, options = {}) => {
-                if (!auth && !url.includes('/auth')) {
-                    window.location.href = '/admin';
-                    return;
-                }
-                
-                try {
-                    const response = await fetch(url, {
-                        ...options,
-                        headers: {
-                            'Authorization': `Basic ${auth}`,
-                            'Content-Type': 'application/json',
-                            ...options.headers
-                        }
-                    });
-                    
-                    if (response.status === 401) {
-                        sessionStorage.removeItem('adminAuth');
-                        window.location.href = '/admin';
-                        return;
-                    }
-                    
-                    return await response.json();
-                } catch (error) {
-                    console.error('API Error:', error);
-                    throw error;
-                }
-            }, [auth]);
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    'Authorization': `Basic ${currentAuth}`,
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                },
+                timeout: 15000
+            });
+            
+            console.log('API Response status:', response.status);
+            
+            if (response.status === 401) {
+                console.log('Unauthorized, clearing auth');
+                sessionStorage.removeItem('adminAuth');
+                window.location.href = '/admin';
+                return null;
+            }
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            console.log('API Response data:', data);
+            return data;
+            
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    }, []);
+
             
             return {
                 // Dashboard APIs
@@ -7270,29 +7306,53 @@ async def admin_dashboard_page():
 
         // 🎯 Custom Hooks
         const useData = (apiCall, dependencies = []) => {
-            const [data, setData] = useState(null);
-            const [loading, setLoading] = useState(true);
-            const [error, setError] = useState(null);
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    
+    const fetchData = useCallback(async () => {
+        try {
+            console.log('useData: Starting API call');
+            setLoading(true);
+            setError(null);
             
-            const fetchData = useCallback(async () => {
-                try {
-                    setLoading(true);
-                    setError(null);
-                    const result = await apiCall();
-                    setData(result?.success ? result.data : null);
-                } catch (err) {
-                    setError(err.message);
-                } finally {
-                    setLoading(false);
-                }
-            }, dependencies);
+            // Add timeout wrapper
+            const result = await Promise.race([
+                apiCall(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Request timeout after 15 seconds')), 15000)
+                )
+            ]);
             
-            useEffect(() => {
-                fetchData();
-            }, [fetchData]);
+            console.log('useData: API result:', result);
             
-            return { data, loading, error, refetch: fetchData };
-        };
+            if (result && result.success) {
+                setData(result.data);
+            } else if (result && result.success === false) {
+                setError(result.message || 'API call failed');
+            } else if (result) {
+                // If no success field, assume it's direct data
+                setData(result);
+            } else {
+                setError('No data received from API');
+            }
+            
+        } catch (err) {
+            console.error('useData: Error:', err);
+            setError(err.message || 'Unknown error occurred');
+        } finally {
+            setLoading(false);
+        }
+    }, dependencies);
+    
+    useEffect(() => {
+        // Small delay to ensure component is mounted
+        const timer = setTimeout(fetchData, 100);
+        return () => clearTimeout(timer);
+    }, [fetchData]);
+    
+    return { data, loading, error, refetch: fetchData };
+};
 
         // 📊 Dashboard Stats Card Component
         const StatsCard = ({ icon, title, value, change, changeType, color, delay = 0 }) => (
@@ -7560,15 +7620,38 @@ async def admin_dashboard_page():
             const { data: dashboardData, loading, error, refetch } = useData(api.getDashboard);
 
             if (loading) {
-                return (
-                    <div className="flex items-center justify-center min-h-96">
-                        <div className="text-center">
-                            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto"></div>
-                            <p className="mt-4 text-gray-600">Loading dashboard data...</p>
-                        </div>
-                    </div>
-                );
-            }
+    return (
+        <div className="flex items-center justify-center min-h-96">
+            <div className="text-center">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto"></div>
+                <p className="mt-4 text-gray-600">Loading dashboard data...</p>
+                <div className="mt-4 space-x-2">
+                    <button
+                        onClick={refetch}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    >
+                        <i className="fas fa-redo mr-2"></i>
+                        Retry
+                    </button>
+                    <button
+                        onClick={() => {
+                            sessionStorage.clear();
+                            window.location.href = '/admin';
+                        }}
+                        className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                    >
+                        <i className="fas fa-sign-out-alt mr-2"></i>
+                        Re-login
+                    </button>
+                </div>
+                <div className="mt-4 text-sm text-gray-500">
+                    Auth: {sessionStorage.getItem('adminAuth') ? 'Present' : 'Missing'}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 
             if (error) {
                 return (
@@ -9511,6 +9594,18 @@ async def admin_dashboard_page():
             const [currentSection, setCurrentSection] = useState('dashboard');
             const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
             const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+            // Add this at the beginning of AdminApp component
+useEffect(() => {
+    const auth = sessionStorage.getItem('adminAuth');
+    console.log('Dashboard loaded, auth status:', auth ? 'Present' : 'Missing');
+    
+    if (!auth) {
+        console.log('No auth found, redirecting to login');
+        window.location.href = '/admin';
+    }
+}, []);
+
 
             useEffect(() => {
                 const handleResize = () => {
